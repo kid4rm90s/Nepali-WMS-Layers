@@ -2,13 +2,13 @@
 // @name             Nepali WMS layers
 // @namespace        https://greasyfork.org/en/users/1087400-kid4rm90s
 // @description      Displays layers from Nepali WMS services in WME
-// @version          2024.12.27.01
+// @version          2024.12.27.02
 // @author           kid4rm90s
 // @match            https://*.waze.com/*/editor*
 // @match            https://*.waze.com/editor
 // @exclude          https://*.waze.com/user/editor*
 // @grant            unsafeWindow
-// @license          MIT
+// @license          none
 // ==/UserScript==
 
 /*  Scripts modified from Czech WMS layers (https://greasyfork.org/cs/scripts/35069-czech-wms-layers) orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https://greasyfork.org/en/scripts/519676-croatian-wms-layers) author: JS55CT */ 
