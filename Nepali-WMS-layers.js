@@ -8,7 +8,7 @@
 // @match            https://*.waze.com/editor
 // @exclude          https://*.waze.com/user/editor*
 // @grant            unsafeWindow
-// @license          none
+// @license          MIT
 // ==/UserScript==
 
 /*  Scripts modified from Czech WMS layers (https://greasyfork.org/cs/scripts/35069-czech-wms-layers) orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https://greasyfork.org/en/scripts/519676-croatian-wms-layers) author: JS55CT */ 
