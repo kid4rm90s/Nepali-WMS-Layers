@@ -2,7 +2,7 @@
 // @name             Nepali WMS layers
 // @namespace        https://greasyfork.org/en/users/1087400-kid4rm90s
 // @description      Displays layers from Nepali WMS services in WME
-// @version          2024.12.26.01
+// @version          2024.12.27.01
 // @author           kid4rm90s
 // @match            https://*.waze.com/*/editor*
 // @match            https://*.waze.com/editor
