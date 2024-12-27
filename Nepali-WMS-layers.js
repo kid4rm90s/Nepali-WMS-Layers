@@ -2,7 +2,7 @@
 // @name             Nepali WMS layers
 // @namespace        https://greasyfork.org/en/users/1087400-kid4rm90s
 // @description      Displays layers from Nepali WMS services in WME
-// @version          2024.12.27.02
+// @version          2024.12.27.03
 // @author           kid4rm90s
 // @match            https://*.waze.com/*/editor*
 // @match            https://*.waze.com/editor
@@ -42,7 +42,7 @@
     // where .params.VERSION >= "1.3.0" use "CRS:" else use  "SRS:"" for the Coordinate System Value
     // New nepali WMS service definition
  
-      var service_ssrn__pavementstatus = {
+      var service_ssrn_PavementLayer2023 = {
       type: "WMS",
       url: "https://geoserver.softwel.com.np/geoserver/ssrn/wms?CQL_FILTER=dyear%3D%272023%27",
       params: {
@@ -56,13 +56,14 @@
         CRS: "EPSG:6207",
 	    STYLES: "",
 		},
-      attribution: "Geoserver Softwel 2023",
+      attribution: "DOR SSRN Geoserver Softwel 2023",
       tileSize: new OL.Size(256, 256),
-	  comment: "Highway Pavement layer 2023",
+	  comment: "ssrn_PavementLayer2023",
     };
     
     // Add WMS layers
-    WMSLayerTogglers.ssrn__pavementstatus = addLayerToggler(groupTogglerHRV, "Highway Pavement layer", [addNewLayer("Nepal:ssrn__pavementstatus", service_ssrn__pavementstatus, ZIndexes.base, 0.6)]);
+	//Streets and Highways
+    WMSLayerTogglers.ssrn_PavementLayer2023 = addLayerToggler(groupTogglerHRV, "SSRN Layer 2023", [addNewLayer("Nepal:ssrn_PavementLayer2023", service_ssrn_PavementLayer2023, ZIndexes.overlay, 1.0)]);
 	 
     if (debug) console.log(`${scriptName}: WMSLayerTogglers`, WMSLayerTogglers);
  
