@@ -2,7 +2,7 @@
 // @name             Nepali WMS layers
 // @namespace        https://greasyfork.org/en/users/1087400-kid4rm90s
 // @description      Displays layers from Nepali WMS services in WME
-// @version          2024.12.27.03
+// @version          2024.12.28.01
 // @author           kid4rm90s
 // @match            https://*.waze.com/*/editor*
 // @match            https://*.waze.com/editor
@@ -60,12 +60,152 @@
       tileSize: new OL.Size(256, 256),
 	  comment: "ssrn_PavementLayer2023",
     };
+    //National bounadary line
+      var service_ssrn_national_boundary_line = {
+      type: "WMS",
+      url: "https://geoserver.softwel.com.np/geoserver/ssrn/wms?",
+      params: {
+        SERVICE: "WMS",
+        VERSION: "1.3.0",
+        REQUEST: "GetMap",
+        FORMAT: "image/png",
+        TRANSPARENT: "true",
+        LAYERS: "ssrn:ssrn_national_boundary_line",
+        CRS: "EPSG:3857",
+	    STYLES: "",
+		},
+      attribution: "DOR SSRN Geoserver Softwel Boundary Line",
+      tileSize: new OL.Size(256, 256),
+	  comment: "ssrn National Boundary Line",
+    };	
+    //Province bounadary line
+      var service_ssrn_province_line = {
+      type: "WMS",
+      url: "https://geoserver.softwel.com.np/geoserver/ssrn/wms?",
+      params: {
+        SERVICE: "WMS",
+        VERSION: "1.3.0",
+        REQUEST: "GetMap",
+        FORMAT: "image/png",
+        TRANSPARENT: "true",
+        LAYERS: "ssrn:ssrn_province_line",
+        CRS: "EPSG:3857",
+	    STYLES: "",
+		},
+      attribution: "SSRN Geoserver Softwel Province Line",
+      tileSize: new OL.Size(256, 256),
+	  comment: "ssrn Procince Boundary Line",
+    };	
+    //District bounadary line
+      var service_ssrn_district_line = {
+      type: "WMS",
+      url: "https://geoserver.softwel.com.np/geoserver/ssrn/wms?",
+      params: {
+        SERVICE: "WMS",
+        VERSION: "1.3.0",
+        REQUEST: "GetMap",
+        FORMAT: "image/png",
+        TRANSPARENT: "true",
+        LAYERS: "ssrn:ssrn_district_boundary_line",
+        CRS: "EPSG:3857",
+	    STYLES: "",
+		},
+      attribution: "SSRN Geoserver Softwel District Line",
+      tileSize: new OL.Size(256, 256),
+	  comment: "ssrn District Line",
+    };		
+    //Municipality bounadary line
+      var service_bsm_municipality_line = {
+      type: "WMS",
+      url: "https://geoserver.softwel.com.np/geoserver/bsm/wms?",
+      params: {
+        SERVICE: "WMS",
+        VERSION: "1.3.0",
+        REQUEST: "GetMap",
+        FORMAT: "image/png",
+        TRANSPARENT: "true",
+        LAYERS: "bsm:bsm_localbodies_line",
+        CRS: "EPSG:3857",
+	    STYLES: "",
+		},
+      attribution: "BSM Geoserver Softwel Municipality Line",
+      tileSize: new OL.Size(256, 256),
+	  comment: "BSM Municipality Line",
+    };		
+    //Municipality name
+      var service_bsm_municipality_name = {
+      type: "WMS",
+      url: "https://geoserver.softwel.com.np/geoserver/bsm/wms?",
+      params: {
+        SERVICE: "WMS",
+        VERSION: "1.3.0",
+        REQUEST: "GetMap",
+        FORMAT: "image/png",
+        TRANSPARENT: "true",
+        LAYERS: "bsm:bsm_localbodies_label",
+        CRS: "EPSG:3857",
+	    STYLES: "",
+		},
+      attribution: "BSM Geoserver Softwel Municipality name",
+      tileSize: new OL.Size(256, 256),
+	  comment: "BSM Municipality Name",
+    };			
+    //major Rivers
+      var service_ssrn_major_river = {
+      type: "WMS",
+      url: "https://geoserver.softwel.com.np/geoserver/ssrn/wms?",
+      params: {
+        SERVICE: "WMS",
+        VERSION: "1.3.0",
+        REQUEST: "GetMap",
+        FORMAT: "image/png",
+        TRANSPARENT: "true",
+        LAYERS: "ssrn:ssrn_major_river",
+        CRS: "EPSG:3857",
+	    STYLES: "",
+		},
+      attribution: "SSRN Softwel Major River",
+      tileSize: new OL.Size(256, 256),
+	  comment: "SSRN Major River",
+    };
+    //Place Junction Names
+      var service_ssrn_junction_name = {
+      type: "WMS",
+      url: "https://geoserver.softwel.com.np/geoserver/ssrn/wms?",
+      params: {
+        SERVICE: "WMS",
+        VERSION: "1.3.0",
+        REQUEST: "GetMap",
+        FORMAT: "image/png",
+        TRANSPARENT: "true",
+        LAYERS: "ssrn:ssrn_junction_name",
+        CRS: "EPSG:3857",
+	    STYLES: "",
+		},
+      attribution: "SSRN Softwel Place Junction Name",
+      tileSize: new OL.Size(256, 256),
+	  comment: "SSRN Place Junction Name",
+    };	
     
     // Add WMS layers
 	//Streets and Highways
-    WMSLayerTogglers.ssrn_PavementLayer2023 = addLayerToggler(groupTogglerHRV, "SSRN Layer 2023", [addNewLayer("Nepal:ssrn_PavementLayer2023", service_ssrn_PavementLayer2023, ZIndexes.overlay, 1.0)]);
-	 
-    if (debug) console.log(`${scriptName}: WMSLayerTogglers`, WMSLayerTogglers);
+    WMSLayerTogglers.ssrn_PavementLayer2023 = addLayerToggler(groupTogglerHRV, "SSRN Highway Layer 2023", [addNewLayer("Nepal:ssrn_PavementLayer2023", service_ssrn_PavementLayer2023, ZIndexes.overlay, 1.0)]);
+	//National Bounadary Line
+    WMSLayerTogglers.ssrn_national_boundary_line = addLayerToggler(groupTogglerHRV, "SSRN National Boundary Line", [addNewLayer("Nepal:ssrn_national_boundary_line", service_ssrn_national_boundary_line, ZIndexes.overlay, 1.0)]);
+	//Province Line
+    WMSLayerTogglers.ssrn_province_line = addLayerToggler(groupTogglerHRV, "SSRN Province Line", [addNewLayer("Nepal:ssrn_province_line", service_ssrn_province_line, ZIndexes.overlay, 1.0)]);
+	//District Line
+    WMSLayerTogglers.ssrn_district_line = addLayerToggler(groupTogglerHRV, "SSRN District Line", [addNewLayer("Nepal:ssrn_district_line", service_ssrn_district_line, ZIndexes.overlay, 1.0)]);	
+	//Municipality Line
+    WMSLayerTogglers.bsm_municipality_line = addLayerToggler(groupTogglerHRV, "BSM Municipality Line", [addNewLayer("Nepal:bsm_municipality_line", service_bsm_municipality_line, ZIndexes.overlay, 1.0)]);	
+	//Municipality Name
+    WMSLayerTogglers.bsm_municipality_name = addLayerToggler(groupTogglerHRV, "BSM Municipality Name", [addNewLayer("Nepal:bsm_municipality_name", service_bsm_municipality_name, ZIndexes.overlay, 1.0)]);	
+	//Major River
+    WMSLayerTogglers.ssrn_major_river = addLayerToggler(groupTogglerHRV, "SSRN Major River", [addNewLayer("Nepal:ssrn_major_river", service_ssrn_major_river, ZIndexes.overlay, 1.0)]);
+	//Places Junction Name
+    WMSLayerTogglers.ssrn_junction_name = addLayerToggler(groupTogglerHRV, "SSRN Place Junction Name", [addNewLayer("Nepal:ssrn_junction_name", service_ssrn_junction_name, ZIndexes.overlay, 1.0)]);	
+	
+	if (debug) console.log(`${scriptName}: WMSLayerTogglers`, WMSLayerTogglers);
  
     setZOrdering(WMSLayerTogglers);
     W.map.events.register("addlayer", null, setZOrdering(WMSLayerTogglers));
