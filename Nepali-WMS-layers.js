@@ -2,7 +2,7 @@
 // @name             Nepali WMS layers
 // @namespace        https://greasyfork.org/en/users/1087400-kid4rm90s
 // @description      Displays layers from Nepali WMS services in WME
-// @version          2024.12.28.01
+// @version          2025.01.01.01
 // @author           kid4rm90s
 // @match            https://*.waze.com/*/editor*
 // @match            https://*.waze.com/editor
@@ -52,13 +52,48 @@
         FORMAT: "image/png",
         TRANSPARENT: "true",
         LAYERS: "ssrn:ssrn_pavementstatus",
-		CQL_FILTER: "dyear%3D%272022%27",
         CRS: "EPSG:6207",
 	    STYLES: "",
 		},
       attribution: "DOR SSRN Geoserver Softwel 2023",
       tileSize: new OL.Size(256, 256),
 	  comment: "ssrn_PavementLayer2023",
+    };
+	//BSM Province Highways 2078/79
+      var service_BSM_PH = {
+      type: "WMS",
+      url: "https://geoserver.softwel.com.np/geoserver/prtmp_01/wms?CQL_FILTER=road_class%3D%27PH%27",
+      params: {
+        SERVICE: "WMS",
+        VERSION: "1.3.0",
+        REQUEST: "GetMap",
+        FORMAT: "image/png",
+        TRANSPARENT: "true",
+        LAYERS: "prtmp_01:road_network",
+        CRS: "EPSG:6207",
+	    STYLES: "",
+		},
+      attribution: "DOR SSRN Geoserver Softwel 2023",
+      tileSize: new OL.Size(256, 256),
+	  comment: "BSM Province Highways 2078/79",
+    };	
+	//BSM Province Roads 2078/79
+      var service_BSM_PR = {
+      type: "WMS",
+      url: "https://geoserver.softwel.com.np/geoserver/prtmp_01/wms?CQL_FILTER=road_class%3D%27PR%27",
+      params: {
+        SERVICE: "WMS",
+        VERSION: "1.3.0",
+        REQUEST: "GetMap",
+        FORMAT: "image/png",
+        TRANSPARENT: "true",
+        LAYERS: "prtmp_01:road_network",
+        CRS: "EPSG:6207",
+	    STYLES: "",
+		},
+      attribution: "DOR SSRN Geoserver Softwel 2023",
+      tileSize: new OL.Size(256, 256),
+	  comment: "BSM Province Highways 2078/79",
     };
     //National bounadary line
       var service_ssrn_national_boundary_line = {
@@ -186,10 +221,14 @@
       tileSize: new OL.Size(256, 256),
 	  comment: "SSRN Place Junction Name",
     };	
-    
+
     // Add WMS layers
 	//Streets and Highways
     WMSLayerTogglers.ssrn_PavementLayer2023 = addLayerToggler(groupTogglerHRV, "SSRN Highway Layer 2023", [addNewLayer("Nepal:ssrn_PavementLayer2023", service_ssrn_PavementLayer2023, ZIndexes.overlay, 1.0)]);
+	//BSM Province Highways
+    WMSLayerTogglers.BSM_PH = addLayerToggler(groupTogglerHRV, "BSM Province Hwy 2078/79", [addNewLayer("Nepal:BSM_PH", service_BSM_PH, ZIndexes.overlay, 1.0)]);
+	//BSM Province Roads
+    WMSLayerTogglers.BSM_PR = addLayerToggler(groupTogglerHRV, "BSM Province Rds 2078/79", [addNewLayer("Nepal:BSM_PR", service_BSM_PR, ZIndexes.overlay, 1.0)]);
 	//National Bounadary Line
     WMSLayerTogglers.ssrn_national_boundary_line = addLayerToggler(groupTogglerHRV, "SSRN National Boundary Line", [addNewLayer("Nepal:ssrn_national_boundary_line", service_ssrn_national_boundary_line, ZIndexes.overlay, 1.0)]);
 	//Province Line
