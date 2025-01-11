@@ -6,7 +6,7 @@
 // @match            https://*.waze.com/*/editor*
 // @match            https://*.waze.com/editor
 // @exclude          https://*.waze.com/user/editor*
-// @run-at			 document-end
+// @run-at           document-end
 // @namespace        https://greasyfork.org/en/users/1087400-kid4rm90s
 // @license          MIT
 // @downloadURL      https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
