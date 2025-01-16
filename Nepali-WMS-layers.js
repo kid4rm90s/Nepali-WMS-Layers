@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name             Nepali WMS layers
-// @version          2025.01.11.02
+// @version          2025.01.16.01
 // @author           kid4rm90s
 // @description      Displays layers from Nepali WMS services in WME
 // @match            https://*.waze.com/*/editor*
@@ -53,8 +53,8 @@ function init() {
 										  0.0373227677121757
 										 ];
 	ZIndexes.base = W.map.olMap.Z_INDEX_BASE.Overlay + 20;
-	ZIndexes.overlay = W.map.olMap.Z_INDEX_BASE.Overlay + 150;
-	ZIndexes.popup = W.map.olMap.Z_INDEX_BASE.Popup + 150;
+	ZIndexes.overlay = W.map.olMap.Z_INDEX_BASE.Overlay + 100;
+	ZIndexes.popup = W.map.olMap.Z_INDEX_BASE.Popup + 100;
 	
 	// adresy WMS služeb * WMS service addresses
     var service_wms_PL2023 = {"type" : "WMS", "url" : "https://geoserver.softwel.com.np/geoserver/ssrn/wms?CQL_FILTER=dyear%3D%272023%27", "attribution" : "© Department of Roads Nepal", "comment" : "ssrn_PavementLayer2023"};
@@ -111,8 +111,8 @@ function init() {
 	// WMSLayerTogglers.wms_orto = addLayerToggler(groupTogglerDisplay, "Ortofoto ČUZK", true, [addNewLayer("wms_orto", service_wms_orto, "GR_ORTFOTORGB", ZIndexes.base)]);
 
 	//ČÚZK NÁZVY A ADRESY * ČÚZK NAMES AND ADDRESSES
-	WMSLayerTogglers.wms_mun_name = addLayerToggler(groupTogglerNames, "BSM Municipality Names", false, [addNewLayer("wms_mun_name", service_wms_BSM, "bsm:bsm_localbodies_label", ZIndexes.popup)]);
-	WMSLayerTogglers.wms_junction_name = addLayerToggler(groupTogglerNames, "SSRN Junction Names", false, [addNewLayer("wms_junction_name", service_wms_SSRN, "ssrn:ssrn_junction_name", ZIndexes.popup)]);
+	WMSLayerTogglers.wms_mun_name = addLayerToggler(groupTogglerNames, "BSM Municipality Names", false, [addNewLayer("wms_mun_name", service_wms_BSM, "bsm:bsm_localbodies_label")]);
+	WMSLayerTogglers.wms_junction_name = addLayerToggler(groupTogglerNames, "SSRN Junction Names", false, [addNewLayer("wms_junction_name", service_wms_SSRN, "ssrn:ssrn_junction_name")]);
 	
 	//ČÚZK HRANICE * BORDER BOARD
 	WMSLayerTogglers.wms_geonational = addLayerToggler(groupTogglerBorders, "Geoportal National Border", false, [addNewLayer("wms_geonational", service_wms_geoportal, "geonode:nepal")]);
