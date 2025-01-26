@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name             Nepali WMS layers
-// @version          2025.01.16.01
+// @version          2025.01.26.01
 // @author           kid4rm90s
 // @description      Displays layers from Nepali WMS services in WME
 // @match            https://*.waze.com/*/editor*
@@ -63,6 +63,7 @@ function init() {
 	var service_wms_SSRN = {"type" : "WMS", "url" : "https://geoserver.softwel.com.np/geoserver/ssrn/wms?", "attribution" : "© Department of Roads Nepal", "comment" : "National + Province + District Boundaries, Rivers, Junctions"};
 	var service_wms_BSM = {"type" : "WMS", "url" : "https://geoserver.softwel.com.np/geoserver/bsm/wms?", "attribution" : "© Department of Roads Nepal", "comment" : "Municipalities names and boundaries"};
 	var service_wms_geoportal = {"type" : "WMS", "url" : "https://admin.nationalgeoportal.gov.np/geoserver/wms?", "attribution" : "© National Geoportal Nepal", "comment" : "Municipalities names and boundaries"};
+	var service_wms_geo_lalitpur = {"type" : "WMS_4326", "url" : "http://localhost:8080/geoserver/geo-lalitpur/wms?", "attribution" : "© Geonp.com.np / LMC", "comment" : "Lalitpur House numbers and boundaries"};	
 
 	//skupiny vrstev v menu * MapTile service addresses
 	var service_xyz_livemap = {"type" : "XYZ", "url" : ["https://worldtiles1.waze.com/tiles/${z}/${x}/${y}.png?highres=true", "https://worldtiles2.waze.com/tiles/${z}/${x}/${y}.png?highres=true", "https://worldtiles3.waze.com/tiles/${z}/${x}/${y}.png?highres=true"],
@@ -113,6 +114,7 @@ function init() {
 	//ČÚZK NÁZVY A ADRESY * ČÚZK NAMES AND ADDRESSES
 	WMSLayerTogglers.wms_mun_name = addLayerToggler(groupTogglerNames, "BSM Municipality Names", false, [addNewLayer("wms_mun_name", service_wms_BSM, "bsm:bsm_localbodies_label")]);
 	WMSLayerTogglers.wms_junction_name = addLayerToggler(groupTogglerNames, "SSRN Junction Names", false, [addNewLayer("wms_junction_name", service_wms_SSRN, "ssrn:ssrn_junction_name")]);
+	WMSLayerTogglers.wms_lalitpur_metric_house = addLayerToggler(groupTogglerNames, "Lalitpur Metric House", false, [addNewLayer("wms_lalitpur_metric_house", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-01_metric_house,geo-lalitpur:lmc_w-02_metric_house,geo-lalitpur:lmc_w-03_metric_house,geo-lalitpur:lmc_w-04_metric_house,geo-lalitpur:lmc_w-05_metric_house,geo-lalitpur:lmc_w-06_metric_house,geo-lalitpur:lmc_w-07_metric_house,geo-lalitpur:lmc_w-08_metric_house,geo-lalitpur:lmc_w-09_metric_house,geo-lalitpur:lmc_w-10_metric_house,geo-lalitpur:lmc_w-11_metric_house,geo-lalitpur:lmc_w-12_metric_house,geo-lalitpur:lmc_w-13_metric_house,geo-lalitpur:lmc_w-14_metric_house,geo-lalitpur:lmc_w-15_metric_house,geo-lalitpur:lmc_w-16_metric_house,geo-lalitpur:lmc_w-17_metric_house,geo-lalitpur:lmc_w-18_metric_house,geo-lalitpur:lmc_w-19_metric_house,geo-lalitpur:lmc_w-20_metric_house,geo-lalitpur:lmc_w-22_metric_house,geo-lalitpur:lmc_w-23_metric_house,geo-lalitpur:lmc_w-24_metric_house,geo-lalitpur:lmc_w-25_metric_house,geo-lalitpur:lmc_w-26_metric_house,geo-lalitpur:lmc_w-27_metric_house,geo-lalitpur:lmc_w-28_metric_house,geo-lalitpur:lmc_w-29_metric_house")]);
 	
 	//ČÚZK HRANICE * BORDER BOARD
 	WMSLayerTogglers.wms_geonational = addLayerToggler(groupTogglerBorders, "Geoportal National Border", false, [addNewLayer("wms_geonational", service_wms_geoportal, "geonode:nepal")]);
@@ -123,6 +125,7 @@ function init() {
 	WMSLayerTogglers.wms_district = addLayerToggler(groupTogglerBorders, "SSRN District Border", false, [addNewLayer("wms_district", service_wms_SSRN, "ssrn:ssrn_district_boundary_line")]);
 	WMSLayerTogglers.wms_geomunicipality = addLayerToggler(groupTogglerBorders, "Geoportal Municipality Border", false, [addNewLayer("wms_geomunicipality", service_wms_geoportal, "geonode:NepalLocalUnits0")]);
 	WMSLayerTogglers.wms_municipality = addLayerToggler(groupTogglerBorders, "BSM Municipality Border", false, [addNewLayer("wms_municipality", service_wms_BSM, "bsm:bsm_localbodies_line")]);	
+	WMSLayerTogglers.wms_lalitpur_boundary = addLayerToggler(groupTogglerBorders, "Lalitpur Ward Boundary", false, [addNewLayer("wms_lalitpur_boundary", service_wms_geo_lalitpur, "geo-lalitpur:lmc_w-01_boundary,geo-lalitpur:lmc_w-02_boundary,geo-lalitpur:lmc_w-03_boundary,geo-lalitpur:lmc_w-04_boundary,geo-lalitpur:lmc_w-05_boundary,geo-lalitpur:lmc_w-06_boundary,geo-lalitpur:lmc_w-07_boundary,geo-lalitpur:lmc_w-08_boundary,geo-lalitpur:lmc_w-09_boundary,geo-lalitpur:lmc_w-10_boundary,geo-lalitpur:lmc_w-11_boundary,geo-lalitpur:lmc_w-12_boundary,geo-lalitpur:lmc_w-13_boundary,geo-lalitpur:lmc_w-14_boundary,geo-lalitpur:lmc_w-15_boundary,geo-lalitpur:lmc_w-16_boundary,geo-lalitpur:lmc_w-17_boundary,geo-lalitpur:lmc_w-18_boundary,geo-lalitpur:lmc_w-19_boundary,geo-lalitpur:lmc_w-20_boundary,geo-lalitpur:lmc_w-22_boundary,geo-lalitpur:lmc_w-23_boundary,geo-lalitpur:lmc_w-24_boundary,geo-lalitpur:lmc_w-25_boundary,geo-lalitpur:lmc_w-26_boundary,geo-lalitpur:lmc_w-27_boundary,geo-lalitpur:lmc_w-28_boundary,geo-lalitpur:lmc_w-29_boundary")]);
 	
 	//EXTERNÍ MAPY * EXTERNAL MAPS
 	WMSLayerTogglers.xyz_livemap = addLayerToggler(groupTogglerExternal, "Waze LiveMap", false, [addNewLayer("xyz_livemap", service_xyz_livemap)]);
