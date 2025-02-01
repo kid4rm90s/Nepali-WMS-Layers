@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name             Nepali WMS layers
-// @version          2025.02.01.01
+// @version          2025.02.01.02
 // @author           kid4rm90s
 // @description      Displays layers from Nepali WMS services in WME
 // @match            https://*.waze.com/*/editor*
@@ -9,6 +9,7 @@
 // @run-at           document-end
 // @namespace        https://greasyfork.org/en/users/1087400-kid4rm90s
 // @license          MIT
+// @require          https://greasyfork.org/scripts/24851-wazewrap/code/WazeWrap.js
 // @downloadURL      https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
 // @updateURL        https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js 
 // ==/UserScript==
@@ -16,6 +17,67 @@
 /*  Scripts modified from Czech WMS layers (https://greasyfork.org/cs/scripts/35069-czech-wms-layers; https://greasyfork.org/en/scripts/34720-private-czech-wms-layers, https://greasyfork.org/en/scripts/28160) 
 orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https://greasyfork.org/en/scripts/519676-croatian-wms-layers) author: JS55CT */ 
 
+(function main() {
+  "use strict";
+
+  const scriptName = GM_info.script.name;
+  const { version } = GM_info.script;
+
+  console.log(`${scriptName}: Loading `);
+
+  // Display change log immediately as it has no dependencies on waze itself.
+  const changeLog = [
+    { version: "1.0", message: "Initial Version" },
+    { version: "2025.02.01.01", message: "Modified how WMS 4326 image is displayed" },
+    { version: "2025.02.01.02", message: "Added support for Wazewrap update dialogue box" },		
+  ];
+
+  async function checkVersion() {
+    if (!WazeWrap?.Ready && !WazeWrap?.Interface?.ShowScriptUpdate) {
+      setTimeout(checkVersion, 200);
+      return;
+    }
+
+    const versionKey = `${scriptName.replace(/\s/g, "")}Version`;
+    const previousVersion = window.localStorage.getItem(versionKey);
+
+    if (previousVersion === version) {
+      return;
+    }
+
+    let announcement = "";
+    let startIndex = 0;
+
+    // Find the index of the previous version in the change log
+    if (previousVersion) {
+      startIndex = changeLog.findIndex(log => log.version === previousVersion);
+      if (startIndex === -1) {
+        startIndex = 0; // If not found, start from the beginning
+      }
+    }
+    announcement += "<ul>";
+    // Build the announcement message from the change log
+    for (let i = startIndex + 1; i < changeLog.length; i++) {
+      const msg = `<li> V${changeLog[i].version}: ${changeLog[i].message} </li>\n`;
+      announcement += msg;
+    }
+    announcement += "</ul>";
+
+    console.group(`${scriptName} v${version} changelog:`);
+    changeLog.slice(startIndex + 1).forEach(log => console.log(`V${log.version}: ${log.message}`));
+    console.groupEnd();
+    const title = startIndex > 0 ? `V${changeLog[startIndex].version} -> V${version}` : `Welcome to Nepali WMS Layer V${version}`;
+    console.log("ShwowScriptUpdate", scriptName, title, announcement);
+    WazeWrap.Interface.ShowScriptUpdate(
+      scriptName,
+      title,
+      announcement,
+      "https://greasyfork.org/scripts/521924",
+    );
+    window.localStorage.setItem(versionKey, version);
+  }
+  checkVersion();
+  
 var WMSLayersTechSource = {};
 var W;
 var OL;
@@ -476,3 +538,4 @@ function getFullRequestString4326(newParams) {
 }
 
 document.addEventListener("wme-map-data-loaded", init, {once: true});
+})();
