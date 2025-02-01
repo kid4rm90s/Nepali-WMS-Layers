@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name             Nepali WMS layers
-// @version          2025.01.26.01
+// @version          2025.02.01.01
 // @author           kid4rm90s
 // @description      Displays layers from Nepali WMS services in WME
 // @match            https://*.waze.com/*/editor*
@@ -461,8 +461,11 @@ function getUrl4326(bounds) {
 	var newParams = {};
 	bounds.transform(this.projection, this.epsg4326);
 	newParams.BBOX = bounds.toArray(this.reverseAxisOrder());
-	newParams.WIDTH = 742;
-	newParams.HEIGHT = 485;
+	var imageSize = this.getImageSize(bounds);
+	newParams.WIDTH = imageSize.w;
+	newParams.HEIGHT = imageSize.h;	
+	// newParams.WIDTH = 742;
+	// newParams.HEIGHT = 485;
 	var requestString = this.getFullRequestString(newParams);
 	return requestString;
 }
