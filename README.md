@@ -66,7 +66,7 @@ Please ensure that any WMS layers you suggest are:
 
 This script is released under the [**MIT License**](LICENSE).  See the `LICENSE` file for more details.
 
-'['https://github.com/kid4rm90s/Nepali-WMS-Layers/blob/main/LICENSE`]`
+['https://github.com/kid4rm90s/Nepali-WMS-Layers/blob/main/LICENSE`]
 
 **Disclaimer:**
 
@@ -76,4 +76,5 @@ This script is an unofficial, community-developed tool and is not endorsed or su
 
 **Acknowledgements** 
 Scripts modified from Czech WMS layers; orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers; author: JS55CT
-**GitHub Repository:** '[https://github.com/kid4rm90s/Nepali-WMS-Layers]'
+
+**GitHub Repository:** [https://github.com/kid4rm90s/Nepali-WMS-Layers]
