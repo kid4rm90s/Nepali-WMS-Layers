@@ -19,7 +19,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 
 (function main() {
   "use strict";
-  
+
 var WMSLayersTechSource = {};
 var W;
 var OL;
@@ -27,6 +27,7 @@ var I18n;
 var ZIndexes = {};
 
 function init() {
+	console.log(`${scriptName} initializing.`);
 	W = unsafeWindow.W;
 	OL = unsafeWindow.OpenLayers;
 	I18n = unsafeWindow.I18n;
@@ -92,6 +93,7 @@ function init() {
 	var groupTogglerNames = addGroupToggler(false, "layer-switcher-group_names", "NP names and addresses");
 	var groupTogglerBorders = addGroupToggler(false, "layer-switcher-group_borders", "NP Borders");
 	var groupTogglerExternal = addGroupToggler(false, "layer-switcher-group_external", "External Maps!!!");
+	var groupTogglerLalitpur = addGroupToggler(false, "layer-switcher-group_lalitpur", "Lalitpur MC HN!");
 	//vrstvy v menu * layers in the menu
 	var WMSLayerTogglers = {};
 	/************************How To add LayerTogglers***************************
@@ -118,7 +120,7 @@ function init() {
 	//ČÚZK NÁZVY A ADRESY * ČÚZK NAMES AND ADDRESSES
 	WMSLayerTogglers.wms_mun_name = addLayerToggler(groupTogglerNames, "BSM Municipality Names", false, [addNewLayer("wms_mun_name", service_wms_BSM, "bsm:bsm_localbodies_label")]);
 	WMSLayerTogglers.wms_junction_name = addLayerToggler(groupTogglerNames, "SSRN Junction Names", false, [addNewLayer("wms_junction_name", service_wms_SSRN, "ssrn:ssrn_junction_name")]);
-	WMSLayerTogglers.wms_lalitpur_metric_house = addLayerToggler(groupTogglerNames, "Lalitpur Metric House", false, [addNewLayer("wms_lalitpur_metric_house", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-01_metric_house,geo-lalitpur:lmc_w-02_metric_house,geo-lalitpur:lmc_w-03_metric_house,geo-lalitpur:lmc_w-04_metric_house,geo-lalitpur:lmc_w-05_metric_house,geo-lalitpur:lmc_w-06_metric_house,geo-lalitpur:lmc_w-07_metric_house,geo-lalitpur:lmc_w-08_metric_house,geo-lalitpur:lmc_w-09_metric_house,geo-lalitpur:lmc_w-10_metric_house,geo-lalitpur:lmc_w-11_metric_house,geo-lalitpur:lmc_w-12_metric_house,geo-lalitpur:lmc_w-13_metric_house,geo-lalitpur:lmc_w-14_metric_house,geo-lalitpur:lmc_w-15_metric_house,geo-lalitpur:lmc_w-16_metric_house,geo-lalitpur:lmc_w-17_metric_house,geo-lalitpur:lmc_w-18_metric_house,geo-lalitpur:lmc_w-19_metric_house,geo-lalitpur:lmc_w-20_metric_house,geo-lalitpur:lmc_w-22_metric_house,geo-lalitpur:lmc_w-23_metric_house,geo-lalitpur:lmc_w-24_metric_house,geo-lalitpur:lmc_w-25_metric_house,geo-lalitpur:lmc_w-26_metric_house,geo-lalitpur:lmc_w-27_metric_house,geo-lalitpur:lmc_w-28_metric_house,geo-lalitpur:lmc_w-29_metric_house")]);
+	WMSLayerTogglers.wms_lalitpur_metric_house = addLayerToggler(groupTogglerNames, "Lalitpur Metric House", false, [addNewLayer("wms_lalitpur_metric_house", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-01_metric_house,geo-lalitpur:lmc_w-02_metric_house,geo-lalitpur:lmc_w-03_metric_house,geo-lalitpur:lmc_w-04_metric_house,geo-lalitpur:lmc_w-05_metric_house,geo-lalitpur:lmc_w-06_metric_house,geo-lalitpur:lmc_w-07_metric_house,geo-lalitpur:lmc_w-08_metric_house,geo-lalitpur:lmc_w-09_metric_house,geo-lalitpur:lmc_w-10_metric_house,geo-lalitpur:lmc_w-11_metric_house,geo-lalitpur:lmc_w-12_metric_house,geo-lalitpur:lmc_w-13_metric_house,geo-lalitpur:lmc_w-14_metric_house,geo-lalitpur:lmc_w-15_metric_house,geo-lalitpur:lmc_w-16_metric_house,geo-lalitpur:lmc_w-17_metric_house,geo-lalitpur:lmc_w-18_metric_house,geo-lalitpur:lmc_w-19_metric_house,geo-lalitpur:lmc_w-20_metric_house,geo-lalitpur:lmc_w-22_metric_house,geo-lalitpur:lmc_w-23_metric_house,geo-lalitpur:lmc_w-24_metric_house,geo-lalitpur:lmc_w-25_metric_house,geo-lalitpur:lmc_w-26_metric_house,geo-lalitpur:lmc_w-27_metric_house,geo-lalitpur:lmc_w-28_metric_house,geo-lalitpur:lmc_w-29_metric_house")]);	
 	
 	//ČÚZK HRANICE * BORDER BOARD
 	WMSLayerTogglers.wms_geonational = addLayerToggler(groupTogglerBorders, "Geoportal National Border", false, [addNewLayer("wms_geonational", service_wms_geoportal, "geonode:nepal")]);
@@ -129,7 +131,7 @@ function init() {
 	WMSLayerTogglers.wms_district = addLayerToggler(groupTogglerBorders, "SSRN District Border", false, [addNewLayer("wms_district", service_wms_SSRN, "ssrn:ssrn_district_boundary_line")]);
 	WMSLayerTogglers.wms_geomunicipality = addLayerToggler(groupTogglerBorders, "Geoportal Municipality Border", false, [addNewLayer("wms_geomunicipality", service_wms_geoportal, "geonode:NepalLocalUnits0")]);
 	WMSLayerTogglers.wms_municipality = addLayerToggler(groupTogglerBorders, "BSM Municipality Border", false, [addNewLayer("wms_municipality", service_wms_BSM, "bsm:bsm_localbodies_line")]);	
-	WMSLayerTogglers.wms_lalitpur_boundary = addLayerToggler(groupTogglerBorders, "Lalitpur Ward Boundary", false, [addNewLayer("wms_lalitpur_boundary", service_wms_geo_lalitpur, "geo-lalitpur:lmc_w-01_boundary,geo-lalitpur:lmc_w-02_boundary,geo-lalitpur:lmc_w-03_boundary,geo-lalitpur:lmc_w-04_boundary,geo-lalitpur:lmc_w-05_boundary,geo-lalitpur:lmc_w-06_boundary,geo-lalitpur:lmc_w-07_boundary,geo-lalitpur:lmc_w-08_boundary,geo-lalitpur:lmc_w-09_boundary,geo-lalitpur:lmc_w-10_boundary,geo-lalitpur:lmc_w-11_boundary,geo-lalitpur:lmc_w-12_boundary,geo-lalitpur:lmc_w-13_boundary,geo-lalitpur:lmc_w-14_boundary,geo-lalitpur:lmc_w-15_boundary,geo-lalitpur:lmc_w-16_boundary,geo-lalitpur:lmc_w-17_boundary,geo-lalitpur:lmc_w-18_boundary,geo-lalitpur:lmc_w-19_boundary,geo-lalitpur:lmc_w-20_boundary,geo-lalitpur:lmc_w-22_boundary,geo-lalitpur:lmc_w-23_boundary,geo-lalitpur:lmc_w-24_boundary,geo-lalitpur:lmc_w-25_boundary,geo-lalitpur:lmc_w-26_boundary,geo-lalitpur:lmc_w-27_boundary,geo-lalitpur:lmc_w-28_boundary,geo-lalitpur:lmc_w-29_boundary")]);
+	WMSLayerTogglers.wms_lalitpur_boundary = addLayerToggler(groupTogglerBorders, "Lalitpur Ward Boundary", false, [addNewLayer("wms_lalitpur_boundary", service_wms_geo_lalitpur, "geo-lalitpur:lmc_w-01_boundary,geo-lalitpur:lmc_w-02_boundary,geo-lalitpur:lmc_w-03_boundary,geo-lalitpur:lmc_w-04_boundary,geo-lalitpur:lmc_w-05_boundary,geo-lalitpur:lmc_w-06_boundary,geo-lalitpur:lmc_w-07_boundary,geo-lalitpur:lmc_w-08_boundary,geo-lalitpur:lmc_w-09_boundary,geo-lalitpur:lmc_w-10_boundary,geo-lalitpur:lmc_w-11_boundary,geo-lalitpur:lmc_w-12_boundary,geo-lalitpur:lmc_w-13_boundary,geo-lalitpur:lmc_w-14_boundary,geo-lalitpur:lmc_w-15_boundary,geo-lalitpur:lmc_w-16_boundary,geo-lalitpur:lmc_w-17_boundary,geo-lalitpur:lmc_w-18_boundary,geo-lalitpur:lmc_w-19_boundary,geo-lalitpur:lmc_w-20_boundary,geo-lalitpur:lmc_w-22_boundary,geo-lalitpur:lmc_w-23_boundary,geo-lalitpur:lmc_w-24_boundary,geo-lalitpur:lmc_w-25_boundary,geo-lalitpur:lmc_w-26_boundary,geo-lalitpur:lmc_w-27_boundary,geo-lalitpur:lmc_w-28_boundary,geo-lalitpur:lmc_w-29_boundary")]);		
 	
 	//EXTERNÍ MAPY * EXTERNAL MAPS
 	WMSLayerTogglers.xyz_livemap = addLayerToggler(groupTogglerExternal, "Waze LiveMap", false, [addNewLayer("xyz_livemap", service_xyz_livemap)]);
@@ -139,6 +141,37 @@ function init() {
 	WMSLayerTogglers.xyz_google_streetview = addLayerToggler(groupTogglerExternal, "Google StreetView", false, [addNewLayer("xyz_google_streetview", service_xyz_google_streetview, null, ZIndexes.popup)]);
 	WMSLayerTogglers.xyz_osm = addLayerToggler(groupTogglerExternal, "OpenStreetMaps", false, [addNewLayer("xyz_osm", service_xyz_osm)]);
 	WMSLayerTogglers.xyz_april = addLayerToggler(groupTogglerExternal, "Apríl !!!", false, [addNewLayer("xyz_april", service_xyz_april)]);
+
+	//LALITPUR METRO CITY METRIC HOUSE NUMBERING
+	WMSLayerTogglers.wms_lmc_ward1 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 1", false, [addNewLayer("wms_lmc_ward1", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-01_metric_house,geo-lalitpur:lmc_w-01_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward2 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 2", false, [addNewLayer("wms_lmc_ward2", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-02_metric_house,geo-lalitpur:lmc_w-02_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward3 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 3", false, [addNewLayer("wms_lmc_ward3", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-03_metric_house,geo-lalitpur:lmc_w-03_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward4 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 4", false, [addNewLayer("wms_lmc_ward4", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-04_metric_house,geo-lalitpur:lmc_w-04_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward5 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 5", false, [addNewLayer("wms_lmc_ward5", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-05_metric_house,geo-lalitpur:lmc_w-05_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward6 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 6", false, [addNewLayer("wms_lmc_ward6", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-06_metric_house,geo-lalitpur:lmc_w-06_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward7 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 7", false, [addNewLayer("wms_lmc_ward7", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-07_metric_house,geo-lalitpur:lmc_w-07_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward8 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 8", false, [addNewLayer("wms_lmc_ward8", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-08_metric_house,geo-lalitpur:lmc_w-08_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward9 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 9", false, [addNewLayer("wms_lmc_ward9", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-09_metric_house,geo-lalitpur:lmc_w-09_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward10 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 10", false, [addNewLayer("wms_lmc_ward10", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-10_metric_house,geo-lalitpur:lmc_w-10_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward11 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 11", false, [addNewLayer("wms_lmc_ward11", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-11_metric_house,geo-lalitpur:lmc_w-11_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward12 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 12", false, [addNewLayer("wms_lmc_ward12", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-12_metric_house,geo-lalitpur:lmc_w-12_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward13 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 13", false, [addNewLayer("wms_lmc_ward13", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-13_metric_house,geo-lalitpur:lmc_w-13_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward14 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 14", false, [addNewLayer("wms_lmc_ward14", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-14_metric_house,geo-lalitpur:lmc_w-14_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward15 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 15", false, [addNewLayer("wms_lmc_ward15", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-15_metric_house,geo-lalitpur:lmc_w-15_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward16 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 16", false, [addNewLayer("wms_lmc_ward16", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-16_metric_house,geo-lalitpur:lmc_w-16_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward17 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 17", false, [addNewLayer("wms_lmc_ward17", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-17_metric_house,geo-lalitpur:lmc_w-17_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward18 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 18", false, [addNewLayer("wms_lmc_ward18", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-18_metric_house,geo-lalitpur:lmc_w-18_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward19 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 19", false, [addNewLayer("wms_lmc_ward19", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-19_metric_house,geo-lalitpur:lmc_w-19_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward20 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 20", false, [addNewLayer("wms_lmc_ward20", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-20_metric_house,geo-lalitpur:lmc_w-20_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward21 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 21", false, [addNewLayer("wms_lmc_ward21", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-21_metric_house,geo-lalitpur:lmc_w-21_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward22 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 22", false, [addNewLayer("wms_lmc_ward22", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-22_metric_house,geo-lalitpur:lmc_w-22_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward23 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 23", false, [addNewLayer("wms_lmc_ward23", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-23_metric_house,geo-lalitpur:lmc_w-23_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward24 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 24", false, [addNewLayer("wms_lmc_ward24", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-24_metric_house,geo-lalitpur:lmc_w-24_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward25 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 25", false, [addNewLayer("wms_lmc_ward25", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-25_metric_house,geo-lalitpur:lmc_w-25_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward26 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 26", false, [addNewLayer("wms_lmc_ward26", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-26_metric_house,geo-lalitpur:lmc_w-26_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward27 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 27", false, [addNewLayer("wms_lmc_ward27", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-27_metric_house,geo-lalitpur:lmc_w-27_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward28 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 28", false, [addNewLayer("wms_lmc_ward28", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-28_metric_house,geo-lalitpur:lmc_w-28_boundary")]);
+	WMSLayerTogglers.wms_lmc_ward29 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 29", false, [addNewLayer("wms_lmc_ward29", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-29_metric_house,geo-lalitpur:lmc_w-29_boundary")]);
 
 	var isLoaded = false;
 	window.addEventListener("beforeunload", function() {
@@ -470,6 +503,9 @@ function getUrl4326(bounds) {
 	newParams.HEIGHT = imageSize.h;	
 	// newParams.WIDTH = 742;
 	// newParams.HEIGHT = 485;
+	//from geoserver
+	// newParams.WIDTH = 648;
+	// newParams.HEIGHT = 768;
 	var requestString = this.getFullRequestString(newParams);
 	return requestString;
 }
@@ -489,7 +525,8 @@ function getFullRequestString4326(newParams) {
     { version: "1.0", message: "Initial Version" },
     { version: "2025.02.01.01", message: "Modified how WMS 4326 image is displayed" },
     { version: "2025.02.01.02", message: "Added support for Wazewrap update dialogue box" },
-    { version: "2025.02.03.01", message: "Line modification" },	
+    { version: "2025.02.03.01", message: "Line modification" },
+	{ version: "2025.03.06.01", message: "Now LMC HN can be filtered by ward" },	
   ];
 
   async function checkVersion() {
@@ -526,7 +563,7 @@ function getFullRequestString4326(newParams) {
     console.group(`${scriptName} v${version} changelog:`);
     changeLog.slice(startIndex + 1).forEach(log => console.log(`V${log.version}: ${log.message}`));
     console.groupEnd();
-    const title = startIndex > 0 ? `V${changeLog[startIndex].version} -> V${version}` : `Welcome to Beta-Nepali WMS Layer V${version}`;
+    const title = startIndex > 0 ? `V${changeLog[startIndex].version} -> V${version}` : `Welcome to Nepali WMS Layer V${version}`;
     console.log("ShwowScriptUpdate", scriptName, title, announcement);
     WazeWrap.Interface.ShowScriptUpdate(
       scriptName,
