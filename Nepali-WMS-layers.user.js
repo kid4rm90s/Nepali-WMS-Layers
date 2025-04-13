@@ -1,24 +1,38 @@
 // ==UserScript==
-// @name             Nepali WMS layers
-// @version          2025.03.06.01
-// @author           kid4rm90s
-// @description      Displays layers from Nepali WMS services in WME
-// @match            https://*.waze.com/*/editor*
-// @match            https://*.waze.com/editor
-// @exclude          https://*.waze.com/user/editor*
-// @run-at           document-end
-// @namespace        https://greasyfork.org/en/users/1087400-kid4rm90s
-// @license          MIT
-// @require          https://greasyfork.org/scripts/24851-wazewrap/code/WazeWrap.js
-// @downloadURL      https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
-// @updateURL        https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js 
+// @name          Nepali WMS layers
+// @version       2025.04.13.01
+// @author        kid4rm90s
+// @description   Displays layers from Nepali WMS services in WME
+// @match         https://*.waze.com/*/editor*
+// @match         https://*.waze.com/editor
+// @exclude       https://*.waze.com/user/editor*
+// @run-at        document-end
+// @namespace     https://greasyfork.org/en/users/1087400-kid4rm90s
+// @license       MIT
+// @grant         GM_xmlhttpRequest
+// @connect       greasyfork.org
+// @require       https://greasyfork.org/scripts/24851-wazewrap/code/WazeWrap.js
+// @require       https://update.greasyfork.org/scripts/509664/WME%20Utils%20-%20Bootstrap.js
+// @downloadURL   https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
+// @updateURL     https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js 
 // ==/UserScript==
 
 /*  Scripts modified from Czech WMS layers (https://greasyfork.org/cs/scripts/35069-czech-wms-layers; https://greasyfork.org/en/scripts/34720-private-czech-wms-layers, https://greasyfork.org/en/scripts/28160) 
 orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https://greasyfork.org/en/scripts/519676-croatian-wms-layers) author: JS55CT */ 
 
+/* global W */
+/* global WazeWrap */
+/* global $ */
+/* global OpenLayers */
+/* global require */
+
 (function main() {
   "use strict";
+   const updateMessage = 'Combatible with the latest wme beta v2.287-5<br>Now it monitors the script update!';
+   const scriptName = GM_info.script.name;
+   const scriptVersion = GM_info.script.version;
+  const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
+   let wmeSDK;
 
 var WMSLayersTechSource = {};
 var W;
@@ -276,14 +290,25 @@ function init() {
 }
 
 function fillWMSLayersSelectList() {
-	var select = document.getElementById("WMSLayersSelect");
-	var value = select.value;
-	var htmlCode;
-	W.map.layers.filter(layer => layer.params !== undefined && layer.params.SERVICE !== undefined && layer.params.SERVICE == "WMS").forEach(
-		layer => (htmlCode += "<option value='" + layer.name + "'>" + layer.name + "</option><br>"));
-	select.innerHTML = htmlCode;
-	select.value = value;
-}
+    var select = document.getElementById("WMSLayersSelect");
+    if (!select) {
+        console.warn("WMSLayersSelect element not found in the DOM.");
+        return; // Exit the function if the element is not found
+    }
+
+    var value = select.value;
+    var htmlCode = ""; // Initialize htmlCode to avoid undefined errors
+    W.map.layers.filter(layer => layer.params !== undefined && layer.params.SERVICE !== undefined && layer.params.SERVICE == "WMS").forEach(
+		layer => {
+            htmlCode += "<option value='" + layer.name + "'>" + layer.name + "</option><br>";
+        });
+    select.innerHTML = htmlCode;
+    select.value = value;
+	}
+	document.addEventListener("DOMContentLoaded", function () {
+    W.map.events.register("addlayer", null, fillWMSLayersSelectList);
+    W.map.events.register("removelayer", null, fillWMSLayersSelectList);
+	});
 
 function addNewLayer(id, service, serviceLayers, zIndex = 0, opacity = 1) {
 	var newLayer = {};
@@ -514,66 +539,29 @@ function getFullRequestString4326(newParams) {
 	this.params.SRS = "EPSG:4326";
 	return OL.Layer.Grid.prototype.getFullRequestString.apply(this, arguments);
 }
+/*
+changeLog
 
-  const scriptName = GM_info.script.name;
-  const { version } = GM_info.script;
-
-  console.log(`${scriptName}: Loading `);
-
-  // Display change log immediately as it has no dependencies on waze itself.
-  const changeLog = [
-    { version: "1.0", message: "Initial Version" },
-    { version: "2025.02.01.01", message: "Modified how WMS 4326 image is displayed" },
-    { version: "2025.02.01.02", message: "Added support for Wazewrap update dialogue box" },
-    { version: "2025.02.03.01", message: "Line modification" },
-	{ version: "2025.03.06.01", message: "Now LMC HN can be filtered by ward" },	
-  ];
-
-  async function checkVersion() {
-    if (!WazeWrap?.Ready && !WazeWrap?.Interface?.ShowScriptUpdate) {
-      setTimeout(checkVersion, 200);
-      return;
-    }
-
-    const versionKey = `${scriptName.replace(/\s/g, "")}Version`;
-    const previousVersion = window.localStorage.getItem(versionKey);
-
-    if (previousVersion === version) {
-      return;
-    }
-
-    let announcement = "";
-    let startIndex = 0;
-
-    // Find the index of the previous version in the change log
-    if (previousVersion) {
-      startIndex = changeLog.findIndex(log => log.version === previousVersion);
-      if (startIndex === -1) {
-        startIndex = 0; // If not found, start from the beginning
-      }
-    }
-    announcement += "<ul>";
-    // Build the announcement message from the change log
-    for (let i = startIndex + 1; i < changeLog.length; i++) {
-      const msg = `<li> V${changeLog[i].version}: ${changeLog[i].message} </li>\n`;
-      announcement += msg;
-    }
-    announcement += "</ul>";
-
-    console.group(`${scriptName} v${version} changelog:`);
-    changeLog.slice(startIndex + 1).forEach(log => console.log(`V${log.version}: ${log.message}`));
-    console.groupEnd();
-    const title = startIndex > 0 ? `V${changeLog[startIndex].version} -> V${version}` : `Welcome to Nepali WMS Layer V${version}`;
-    console.log("ShwowScriptUpdate", scriptName, title, announcement);
-    WazeWrap.Interface.ShowScriptUpdate(
-      scriptName,
-      title,
-      announcement,
-      "https://greasyfork.org/scripts/521924",
-    );
-    window.localStorage.setItem(versionKey, version);
-  }
-  checkVersion();
+version: "1.0", message: "Initial Version" },
+version: 2025.02.01.01 - Modified how WMS 4326 image is displayed
+version: 2025.02.01.02 - Added support for Wazewrap update dialogue box
+version: 2025.02.03.01 - Line modification
+version: 2025.03.06.01 - Now LMC HN can be filtered by ward
+version: 2025.04.13.01 - Fixed Combatible with the latest wme beta v2.287-5! Now it monitors the script update!
+	
+*/
   
+ function scriptupdatemonitor() {
+        if (WazeWrap?.Ready) {
+            WazeWrap.Interface.ShowScriptUpdate(scriptName, scriptVersion, updateMessage);
+        } else {
+            setTimeout(scriptupdatemonitor, 250);
+        }
+    }
+    // Start the "scriptupdatemonitor"
+    scriptupdatemonitor();
+	wmeSDK = bootstrap({ scriptUpdateMonitor: { downloadUrl } });
+    console.log(`${scriptName} initialized.`);
+	
 document.addEventListener("wme-map-data-loaded", init, {once: true});
 })();
