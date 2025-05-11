@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2025.04.13.02
+// @version       2025.05.11.01
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://*.waze.com/*/editor*
@@ -40,7 +40,7 @@ var OL;
 var I18n;
 var ZIndexes = {};
 
-function init() {
+async function init() {
 	console.log(`${scriptName} initializing.`);
 	W = unsafeWindow.W;
 	OL = unsafeWindow.OpenLayers;
@@ -73,7 +73,7 @@ function init() {
 										 ];
 	ZIndexes.base = W.map.olMap.Z_INDEX_BASE.Overlay + 20;
 	ZIndexes.overlay = W.map.olMap.Z_INDEX_BASE.Overlay + 100;
-	ZIndexes.popup = W.map.olMap.Z_INDEX_BASE.Popup + 100;
+	ZIndexes.popup = W.map.olMap.Z_INDEX_BASE.Overlay + 500;
 	
 	// adresy WMS služeb * WMS service addresses
     var service_wms_PL2023 = {"type" : "WMS", "url" : "https://geoserver.softwel.com.np/geoserver/ssrn/wms?CQL_FILTER=dyear%3D%272023%27", "attribution" : "© Department of Roads Nepal", "comment" : "ssrn_PavementLayer2023"};
@@ -82,8 +82,8 @@ function init() {
 	var service_wms_SSRN = {"type" : "WMS", "url" : "https://geoserver.softwel.com.np/geoserver/ssrn/wms?", "attribution" : "© Department of Roads Nepal", "comment" : "National + Province + District Boundaries, Rivers, Junctions"};
 	var service_wms_BSM = {"type" : "WMS", "url" : "https://geoserver.softwel.com.np/geoserver/bsm/wms?", "attribution" : "© Department of Roads Nepal", "comment" : "Municipalities names and boundaries"};
 	var service_wms_geoportal = {"type" : "WMS", "url" : "https://admin.nationalgeoportal.gov.np/geoserver/wms?", "attribution" : "© National Geoportal Nepal", "comment" : "Municipalities names and boundaries"};
-	var service_wms_geo_lalitpur = {"type" : "WMS_4326", "url" : "http://localhost:8080/geoserver/geo-lalitpur/wms?", "attribution" : "© Geonp.com.np / LMC", "comment" : "Lalitpur House numbers and boundaries"};	
-
+	var service_wms_geo_lalitpur = {"type" : "WMS_4326", "url" : "http://localhost:8080/geoserver/geo-lalitpur/wms?", "attribution" : "© Geonp.com.np / LMC", "comment" : "Lalitpur House numbers and boundaries"};
+	
 	//skupiny vrstev v menu * MapTile service addresses
 	var service_xyz_livemap = {"type" : "XYZ", "url" : ["https://worldtiles1.waze.com/tiles/${z}/${x}/${y}.png?highres=true", "https://worldtiles2.waze.com/tiles/${z}/${x}/${y}.png?highres=true", "https://worldtiles3.waze.com/tiles/${z}/${x}/${y}.png?highres=true"],
 							   "attribution" : "© 2006-2023 Waze Mobile. Všechna práva vyhrazena. <a href='https://www.waze.com/legal/notices' target='_blank'>Poznámky</a>", "comment" : "Waze Livemapa"};
@@ -100,6 +100,7 @@ function init() {
 							 "url" : ["https://worldtiles1.waze.com/tiles/${z}/${x}/${y}.png?highres=true", "https://mts0.googleapis.com/vt/lyrs=m&z=${z}&x=${x}&y=${y}", "https://mts0.googleapis.com/vt/lyrs=p&z=${z}&x=${x}&y=${y}",
 									  "https://tile.openstreetmap.org/${z}/${x}/${y}.png"],
 							 "attribution" : "mišmaš", "comment" : "mišmaš"};
+
 	//skupiny vrstev v menu * layer groups in the menu
 	var groupTogglerPlaces = addGroupToggler(true, "layer-switcher-group_places");
 	var groupTogglerRoad = addGroupToggler(true, "layer-switcher-group_road");
@@ -269,6 +270,7 @@ function init() {
 	section.appendChild(opacityLabel);
 	section.appendChild(opacityRange);
 	tabPane.appendChild(section);
+	await W.userscripts.waitForElementConnected(tabPane);	
 	opacityRange.addEventListener("input", function() {
 		var value = document.getElementById("WMSLayersSelect").value;
 		if (value !== "" && value !== "undefined") {
@@ -288,7 +290,7 @@ function init() {
 	W.map.events.register("removelayer", null, setZOrdering(WMSLayerTogglers));
 	W.map.events.register("moveend", null, setZOrdering(WMSLayerTogglers));
 }
-
+/*
 function fillWMSLayersSelectList() {
     var select = document.getElementById("WMSLayersSelect");
     if (!select) {
@@ -304,16 +306,29 @@ function fillWMSLayersSelectList() {
         });
     select.innerHTML = htmlCode;
     select.value = value;
-	}
-	document.addEventListener("DOMContentLoaded", function () {
+}
+document.addEventListener("DOMContentLoaded", function () {
     W.map.events.register("addlayer", null, fillWMSLayersSelectList);
     W.map.events.register("removelayer", null, fillWMSLayersSelectList);
-	});
+});*/
+function fillWMSLayersSelectList() {
+	var select = document.getElementById("WMSLayersSelect");
+	var value = select.value;
+	var htmlCode;
+	W.map.layers.filter(layer => layer.params !== undefined && layer.params.SERVICE !== undefined && layer.params.SERVICE == "WMS").forEach(
+		layer => (htmlCode += "<option value='" + layer.name + "'>" + layer.name + "</option><br>"));
+	select.innerHTML = htmlCode;
+	select.value = value;
+}
 
 function addNewLayer(id, service, serviceLayers, zIndex = 0, opacity = 1) {
 	var newLayer = {};
 	newLayer.serviceType = service.type;
-	newLayer.zIndex = (service.type == "XYZ" || zIndex == 0) ? ZIndexes.overlay : zIndex;
+	if (service.type == "XYZ" & zIndex == 0) {
+		newLayer.zIndex = ZIndexes.base;
+	} else {
+		newLayer.zIndex = (zIndex == 0) ? ZIndexes.popup : zIndex;
+	}
 	switch(service.type) {
 		case "WMS":
 			newLayer.layer = new OL.Layer.WMS(
@@ -548,6 +563,7 @@ version: 2025.02.01.02 - Added support for Wazewrap update dialogue box
 version: 2025.02.03.01 - Line modification
 version: 2025.03.06.01 - Now LMC HN can be filtered by ward
 version: 2025.04.13.01 - Fixed Combatible with the latest wme beta v2.287-5! Now it monitors the script update!
+version: 2025.05.11.01 - Fixed Z-ordering
 	
 */
   
