@@ -604,7 +604,7 @@ version: 2025.03.06.01 - Now LMC HN can be filtered by ward
 version: 2025.04.13.01 - Fixed Combatible with the latest wme beta v2.287-5! Now it monitors the script update!
 version: 2025.05.11.01 - Fixed Z-ordering
 Version: 2025.06.06.01 - Added Bridge Management System bridge locations!
-Version: 2025.06.06.01 - Added Bridge Management System bridge locations!
+Version: 2025.06.06.02 - Added Bridge Management System bridge locations!
                        - Loaded layers will be reloaded even after the page refresh.
 	
 */
