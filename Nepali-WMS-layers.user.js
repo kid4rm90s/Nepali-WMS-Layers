@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2025.05.11.01
+// @version       2025.06.06.01
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://*.waze.com/*/editor*
@@ -28,7 +28,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 
 (function main() {
   "use strict";
-   const updateMessage = 'Combatible with the latest wme beta v2.287-5<br>Now it monitors the script update!';
+   const updateMessage = 'Added Bridge Management System bridge locations!';
    const scriptName = GM_info.script.name;
    const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -127,7 +127,9 @@ async function init() {
 	//SILNICE * ROAD
 	WMSLayerTogglers.wms_PL2023 = addLayerToggler(groupTogglerRoad, "SSRN Highway Layer 2023", false, [addNewLayer("wms_PL2023", service_wms_PL2023, "ssrn:ssrn_pavementstatus")]);
 	WMSLayerTogglers.wms_BSM_PH = addLayerToggler(groupTogglerRoad, "BSM Province Hwy 2078/79", false, [addNewLayer("wms_BSM_PH", service_wms_BSM_PH, "prtmp_01:road_network")]);
-	WMSLayerTogglers.wms_BSM_PR = addLayerToggler(groupTogglerRoad, "BSM Province Rd 2078/79", false, [addNewLayer("wms_BSM_PR", service_wms_BSM_PR, "prtmp_01:road_network")]);	
+	WMSLayerTogglers.wms_BSM_PR = addLayerToggler(groupTogglerRoad, "BSM Province Rd 2078/79", false, [addNewLayer("wms_BSM_PR", service_wms_BSM_PR, "prtmp_01:road_network")]);
+	WMSLayerTogglers.wms_BSM_Brg1 = addLayerToggler(groupTogglerRoad, "BSM Bridges New", false, [addNewLayer("wms_BSM_Brg1", service_wms_BSM, "bsm:bsm_nc_primary_detail,bsm:nc_primary_detail_code")])	
+	WMSLayerTogglers.wms_BSM_Brg2 = addLayerToggler(groupTogglerRoad, "BSM Bridges Old", false, [addNewLayer("wms_BSM_Brg2", service_wms_BSM, "bsm:bsm_bi_primary_detail,bsm:bi_primary_detail_code")]);	
 	
 	//ZOBRAZENÍ * DISPLAY
 	// WMSLayerTogglers.wms_orto = addLayerToggler(groupTogglerDisplay, "Ortofoto ČUZK", true, [addNewLayer("wms_orto", service_wms_orto, "GR_ORTFOTORGB", ZIndexes.base)]);
@@ -290,27 +292,7 @@ async function init() {
 	W.map.events.register("removelayer", null, setZOrdering(WMSLayerTogglers));
 	W.map.events.register("moveend", null, setZOrdering(WMSLayerTogglers));
 }
-/*
-function fillWMSLayersSelectList() {
-    var select = document.getElementById("WMSLayersSelect");
-    if (!select) {
-        console.warn("WMSLayersSelect element not found in the DOM.");
-        return; // Exit the function if the element is not found
-    }
 
-    var value = select.value;
-    var htmlCode = ""; // Initialize htmlCode to avoid undefined errors
-    W.map.layers.filter(layer => layer.params !== undefined && layer.params.SERVICE !== undefined && layer.params.SERVICE == "WMS").forEach(
-		layer => {
-            htmlCode += "<option value='" + layer.name + "'>" + layer.name + "</option><br>";
-        });
-    select.innerHTML = htmlCode;
-    select.value = value;
-}
-document.addEventListener("DOMContentLoaded", function () {
-    W.map.events.register("addlayer", null, fillWMSLayersSelectList);
-    W.map.events.register("removelayer", null, fillWMSLayersSelectList);
-});*/
 function fillWMSLayersSelectList() {
 	var select = document.getElementById("WMSLayersSelect");
 	var value = select.value;
