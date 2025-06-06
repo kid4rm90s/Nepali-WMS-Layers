@@ -28,7 +28,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 
 (function main() {
   "use strict";
-   const updateMessage = 'Added Bridge Management System bridge locations!';
+   const updateMessage = 'Added Bridge Management System bridge locations!<br> Loaded layers will be reloaded even after the page refresh.';
    const scriptName = GM_info.script.name;
    const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -39,6 +39,7 @@ var W;
 var OL;
 var I18n;
 var ZIndexes = {};
+var WMSLayerTogglers = {};
 
 async function init() {
 	console.log(`${scriptName} initializing.`);
@@ -110,7 +111,6 @@ async function init() {
 	var groupTogglerExternal = addGroupToggler(false, "layer-switcher-group_external", "External Maps!!!");
 	var groupTogglerLalitpur = addGroupToggler(false, "layer-switcher-group_lalitpur", "Lalitpur MC HN!");
 	//vrstvy v menu * layers in the menu
-	var WMSLayerTogglers = {};
 	/************************How To add LayerTogglers***************************
 	WMSLayerTogglers.*(1)* = addLayerToggler(groupTogglerPlaces, "*(2)*", false, [addNewLayer("*(1)*", *(3)*, "*(4)*")]);
 	INDEX:
@@ -129,7 +129,7 @@ async function init() {
 	WMSLayerTogglers.wms_BSM_PH = addLayerToggler(groupTogglerRoad, "BSM Province Hwy 2078/79", false, [addNewLayer("wms_BSM_PH", service_wms_BSM_PH, "prtmp_01:road_network")]);
 	WMSLayerTogglers.wms_BSM_PR = addLayerToggler(groupTogglerRoad, "BSM Province Rd 2078/79", false, [addNewLayer("wms_BSM_PR", service_wms_BSM_PR, "prtmp_01:road_network")]);
 	WMSLayerTogglers.wms_BSM_Brg1 = addLayerToggler(groupTogglerRoad, "BSM Bridges New", false, [addNewLayer("wms_BSM_Brg1", service_wms_BSM, "bsm:bsm_nc_primary_detail,bsm:nc_primary_detail_code")])	
-	WMSLayerTogglers.wms_BSM_Brg2 = addLayerToggler(groupTogglerRoad, "BSM Bridges Old", false, [addNewLayer("wms_BSM_Brg2", service_wms_BSM, "bsm:bsm_bi_primary_detail,bsm:bi_primary_detail_code")]);	
+	WMSLayerTogglers.wms_BSM_Brg2 = addLayerToggler(groupTogglerRoad, "BSM Bridges Old", false, [addNewLayer("wms_BSM_Brg2", service_wms_BSM, "bsm:bsm_bi_primary_detail,bsm:bi_primary_detail_code")]);
 	
 	//ZOBRAZENÍ * DISPLAY
 	// WMSLayerTogglers.wms_orto = addLayerToggler(groupTogglerDisplay, "Ortofoto ČUZK", true, [addNewLayer("wms_orto", service_wms_orto, "GR_ORTFOTORGB", ZIndexes.base)]);
@@ -190,29 +190,43 @@ async function init() {
 	WMSLayerTogglers.wms_lmc_ward28 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 28", false, [addNewLayer("wms_lmc_ward28", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-28_metric_house,geo-lalitpur:lmc_w-28_boundary")]);
 	WMSLayerTogglers.wms_lmc_ward29 = addLayerToggler(groupTogglerLalitpur, "LMC Ward 29", false, [addNewLayer("wms_lmc_ward29", service_wms_geo_lalitpur,  "geo-lalitpur:lmc_w-29_metric_house,geo-lalitpur:lmc_w-29_boundary")]);
 
-	var isLoaded = false;
-	window.addEventListener("beforeunload", function() {
-		if (localStorage && isLoaded) {
-			var JSONStorageOptions = {};
-			for (var key in WMSLayerTogglers) {
-				if (WMSLayerTogglers[key].serviceType == "WMS") {
-					JSONStorageOptions[key] = document.getElementById(WMSLayerTogglers[key].htmlItem).checked;
-				}
-			}
-			localStorage.WMSLayers = JSON.stringify(JSONStorageOptions);
-		}
-	}, false);
-	window.addEventListener("load", function() {
-		isLoaded = true;
-		if (localStorage.WMSLayers) {
-			var JSONStorageOptions = JSON.parse(localStorage.WMSLayers);
-			for (var key in WMSLayerTogglers) {
-				if (JSONStorageOptions[key] && WMSLayerTogglers[key].serviceType == "WMS") {
-					document.getElementById(WMSLayerTogglers[key].htmlItem).click();
-				}
-			}
-		}
-	}, false);
+	// --- Layer toggler state persistence ---
+    function saveLayerTogglerStates() {
+        if (!localStorage) return;
+        const state = {};
+        for (const key in WMSLayerTogglers) {
+            const togglerId = WMSLayerTogglers[key].htmlItem;
+            const toggler = document.getElementById(togglerId);
+            if (toggler) state[key] = toggler.checked;
+        }
+        localStorage.WMSLayers = JSON.stringify(state);
+    }
+
+    function restoreLayerTogglerStates() {
+        if (!localStorage.WMSLayers) return;
+        const state = JSON.parse(localStorage.WMSLayers);
+        for (const key in state) {
+            if (WMSLayerTogglers[key]) {
+                const togglerId = WMSLayerTogglers[key].htmlItem;
+                const toggler = document.getElementById(togglerId);
+                if (toggler && toggler.checked !== state[key]) {
+                    toggler.checked = state[key];
+                    toggler.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+        }
+    }
+
+    // Attach change listeners to save state on toggle
+    for (const key in WMSLayerTogglers) {
+        const togglerId = WMSLayerTogglers[key].htmlItem;
+        const toggler = document.getElementById(togglerId);
+        if (toggler) {
+            toggler.addEventListener('change', saveLayerTogglerStates);
+        }
+    }
+    // Restore state after togglers are created
+    restoreLayerTogglerStates();
 
 	var GSVlayer = WMSLayerTogglers.xyz_google_streetview.layerArray[0].layer;
 	var enteringStreetView = false;
@@ -272,7 +286,7 @@ async function init() {
 	section.appendChild(opacityLabel);
 	section.appendChild(opacityRange);
 	tabPane.appendChild(section);
-	await W.userscripts.waitForElementConnected(tabPane);	
+	await W.userscripts.waitForElementConnected(tabPane);
 	opacityRange.addEventListener("input", function() {
 		var value = document.getElementById("WMSLayersSelect").value;
 		if (value !== "" && value !== "undefined") {
@@ -536,6 +550,49 @@ function getFullRequestString4326(newParams) {
 	this.params.SRS = "EPSG:4326";
 	return OL.Layer.Grid.prototype.getFullRequestString.apply(this, arguments);
 }
+
+// After all WMSLayerTogglers are created:
+
+// --- Layer toggler state persistence ---
+    // Utility to save all toggler states
+    function saveLayerTogglerStates() {
+        if (!localStorage) return;
+        const state = {};
+        for (const key in WMSLayerTogglers) {
+            const togglerId = WMSLayerTogglers[key].htmlItem;
+            const toggler = document.getElementById(togglerId);
+            if (toggler) state[key] = toggler.checked;
+        }
+        localStorage.WMSLayers = JSON.stringify(state);
+    }
+
+    // Utility to restore all toggler states
+    function restoreLayerTogglerStates() {
+        if (!localStorage.WMSLayers) return;
+        const state = JSON.parse(localStorage.WMSLayers);
+        for (const key in state) {
+            if (WMSLayerTogglers[key]) {
+                const togglerId = WMSLayerTogglers[key].htmlItem;
+                const toggler = document.getElementById(togglerId);
+                if (toggler && toggler.checked !== state[key]) {
+                    toggler.checked = state[key];
+                    toggler.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+        }
+    }
+
+    // Attach change listeners to save state on toggle
+    for (const key in WMSLayerTogglers) {
+        const togglerId = WMSLayerTogglers[key].htmlItem;
+        const toggler = document.getElementById(togglerId);
+        if (toggler) {
+            toggler.addEventListener('change', saveLayerTogglerStates);
+        }
+    }
+    // Restore state after togglers are created
+    restoreLayerTogglerStates();
+
 /*
 changeLog
 
@@ -546,6 +603,9 @@ version: 2025.02.03.01 - Line modification
 version: 2025.03.06.01 - Now LMC HN can be filtered by ward
 version: 2025.04.13.01 - Fixed Combatible with the latest wme beta v2.287-5! Now it monitors the script update!
 version: 2025.05.11.01 - Fixed Z-ordering
+Version: 2025.06.06.01 - Added Bridge Management System bridge locations!
+Version: 2025.06.06.01 - Added Bridge Management System bridge locations!
+                       - Loaded layers will be reloaded even after the page refresh.
 	
 */
   
@@ -560,6 +620,7 @@ version: 2025.05.11.01 - Fixed Z-ordering
     scriptupdatemonitor();
 	wmeSDK = bootstrap({ scriptUpdateMonitor: { downloadUrl } });
     console.log(`${scriptName} initialized.`);
-	
+
 document.addEventListener("wme-map-data-loaded", init, {once: true});
+
 })();
