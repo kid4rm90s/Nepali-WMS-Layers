@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2025.06.06.02
+// @version       2025.06.08.01
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://*.waze.com/*/editor*
@@ -28,7 +28,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 
 (function main() {
   "use strict";
-   const updateMessage = 'Added Bridge Management System bridge locations!<br> Loaded layers will be reloaded even after the page refresh.';
+   const updateMessage = 'Now the WMS layer can be shifted by a specified distance in metres.';
    const scriptName = GM_info.script.name;
    const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -285,20 +285,155 @@ async function init() {
 	opacityLabel.htmlFor = opacityRange.id;
 	section.appendChild(opacityLabel);
 	section.appendChild(opacityRange);
+	
+	// Add shift controls
+    var shiftContainer = document.createElement("div");
+    shiftContainer.style.marginTop = "10px";
+    shiftContainer.style.display = "flex";
+    shiftContainer.style.flexDirection = "column";
+    shiftContainer.style.alignItems = "flex-start";
+
+    var distanceLabel = document.createElement("label");
+    distanceLabel.textContent = "Shift distance (meters): ";
+    distanceLabel.style.marginRight = "5px";
+    var distanceInput = document.createElement("input");
+    distanceInput.type = "number";
+    distanceInput.value = 10;
+    distanceInput.min = 1;
+    distanceInput.style.width = "60px";
+    distanceInput.id = "WMSShiftDistance";
+    distanceLabel.appendChild(distanceInput);
+    shiftContainer.appendChild(distanceLabel);
+
+    var btnRow = document.createElement("div");
+    btnRow.style.display = "flex";
+    btnRow.style.gap = "5px";
+    btnRow.style.marginTop = "5px";
+
+    var btnUp = document.createElement("button");
+    btnUp.textContent = "↑";
+    btnUp.title = "Shift Up";
+    var btnDown = document.createElement("button");
+    btnDown.textContent = "↓";
+    btnDown.title = "Shift Down";
+    var btnLeft = document.createElement("button");
+    btnLeft.textContent = "←";
+    btnLeft.title = "Shift Left";
+    var btnRight = document.createElement("button");
+    btnRight.textContent = "→";
+    btnRight.title = "Shift Right";
+
+    // Add reset button
+    var btnReset = document.createElement("button");
+    btnReset.textContent = "Reset";
+    btnReset.title = "Reset Shift";
+    btnRow.appendChild(btnReset);
+
+    btnRow.appendChild(btnLeft);
+    btnRow.appendChild(btnUp);
+    btnRow.appendChild(btnDown);
+    btnRow.appendChild(btnRight);
+    shiftContainer.appendChild(btnRow);
+    section.appendChild(shiftContainer);
+
+    // Helper: store per-layer offset
+    var wmsLayerOffsets = {};
+
+    // Helper: store original offset for each layer
+    var wmsLayerOriginalOffsets = {};
+
+    // Helper: patch getURL to apply offset
+    function patchWMSLayerGetURL(layer) {
+        if (!layer || layer._wmsShiftPatched) return;
+        const origGetURL = layer.getURL;
+        layer._wmsShiftPatched = true;
+        layer.getURL = function(bounds) {
+            const offset = wmsLayerOffsets?.[layer.name] ?? {x:0, y:0};
+            const newBounds = bounds.clone();
+            newBounds.right += offset.x;
+            newBounds.left += offset.x;
+            newBounds.top += offset.y;
+            newBounds.bottom += offset.y;
+            return origGetURL.call(this, newBounds);
+        };
+    }
+
+    // Helper to shift layer (fix: invert direction logic)
+    function shiftLayer(direction) {
+        var value = document.getElementById("WMSLayersSelect").value;
+        var dist = parseFloat(document.getElementById("WMSShiftDistance").value) || 0;
+        if (!value || value === "undefined" || dist === 0) return;
+        var layer = W.map.getLayerByName(value);
+        if (!layer) return;
+        patchWMSLayerGetURL(layer);
+        var map = W.map;
+        var proj = map.getProjectionObject();
+        var dx = 0, dy = 0;
+        if (proj && proj.projCode === "EPSG:4326") {
+            var centerLat = map.getCenter().lat;
+            var metersPerDegreeLat = 111320;
+            var metersPerDegreeLon = 40075000 * Math.cos(centerLat * Math.PI/180) / 360;
+            switch(direction) {
+                case 'up': dy = -dist / metersPerDegreeLat; break;    // north (decrease y)
+                case 'down': dy = dist / metersPerDegreeLat; break;   // south (increase y)
+                case 'left': dx = dist / metersPerDegreeLon; break;   // west (increase x)
+                case 'right': dx = -dist / metersPerDegreeLon; break; // east (decrease x)
+            }
+        } else {
+            switch(direction) {
+                case 'up': dy = -dist; break;    // north (decrease y)
+                case 'down': dy = dist; break;   // south (increase y)
+                case 'left': dx = dist; break;   // west (increase x)
+                case 'right': dx = -dist; break; // east (decrease x)
+            }
+        }
+        if (!wmsLayerOffsets[layer.name]) wmsLayerOffsets[layer.name] = {x:0, y:0};
+        wmsLayerOffsets[layer.name].x += dx;
+        wmsLayerOffsets[layer.name].y += dy;
+        // Store original offset if not already stored
+        if (!wmsLayerOriginalOffsets[layer.name]) {
+            wmsLayerOriginalOffsets[layer.name] = {x:0, y:0};
+        }
+        // Show WazeWrap alert
+        WazeWrap.Alerts.info(
+            "Layer Shifted",
+            `Layer shifted to ${dist} metres ${direction}. Please wait for fully load.`,false,false,2000);
+        layer.redraw();
+    }
+    btnUp.addEventListener('click', function() { shiftLayer('up'); });
+    btnDown.addEventListener('click', function() { shiftLayer('down'); });
+    btnLeft.addEventListener('click', function() { shiftLayer('left'); });
+    btnRight.addEventListener('click', function() { shiftLayer('right'); });
+
+    // Reset shift for selected layer
+    btnReset.addEventListener('click', function() {
+        var value = document.getElementById("WMSLayersSelect").value;
+        if (!value || value === "undefined") return;
+        var layer = W.map.getLayerByName(value);
+        if (!layer) return;
+        patchWMSLayerGetURL(layer);
+        wmsLayerOffsets[layer.name] = {x:0, y:0};
+        layer.redraw();
+    });
+
 	tabPane.appendChild(section);
 	await W.userscripts.waitForElementConnected(tabPane);
-	opacityRange.addEventListener("input", function() {
-		var value = document.getElementById("WMSLayersSelect").value;
-		if (value !== "" && value !== "undefined") {
-			var layer = W.map.getLayerByName(value);
-			layer.setOpacity(opacityRange.value / 100);
-			document.getElementById("WMSOpacityLabel").textContent = "Layer transparency: " + document.getElementById("WMSOpacity").value + " %";
-		}
-	});
-	WMSSelect.addEventListener("change", function() {
-		opacityRange.value = W.map.layers.filter(layer => layer.name == WMSSelect.value)[0].opacity * 100;
-		document.getElementById("WMSOpacityLabel").textContent = "Layer transparency: " + document.getElementById("WMSOpacity").value + " %";
-	});
+	fillWMSLayersSelectList();
+    opacityRange.addEventListener("input", function() {
+        var value = document.getElementById("WMSLayersSelect").value;
+        if (value !== "" && value !== "undefined") {
+            var layer = W.map.getLayerByName(value);
+            layer.setOpacity(opacityRange.value / 100);
+            document.getElementById("WMSOpacityLabel").textContent = "Layer transparency: " + document.getElementById("WMSOpacity").value + " %";
+        }
+    });
+    WMSSelect.addEventListener("change", function() {
+        var selectedLayer = W.map.layers.filter(layer => layer.name == WMSSelect.value)[0];
+        if (selectedLayer) {
+            opacityRange.value = selectedLayer.opacity * 100;
+            document.getElementById("WMSOpacityLabel").textContent = "Layer transparency: " + document.getElementById("WMSOpacity").value + " %";
+        }
+    });
 	setZOrdering(WMSLayerTogglers);
 	W.map.events.register("addlayer", null, fillWMSLayersSelectList);
 	W.map.events.register("removelayer", null, fillWMSLayersSelectList);
@@ -308,13 +443,13 @@ async function init() {
 }
 
 function fillWMSLayersSelectList() {
-	var select = document.getElementById("WMSLayersSelect");
-	var value = select.value;
-	var htmlCode;
-	W.map.layers.filter(layer => layer.params !== undefined && layer.params.SERVICE !== undefined && layer.params.SERVICE == "WMS").forEach(
-		layer => (htmlCode += "<option value='" + layer.name + "'>" + layer.name + "</option><br>"));
-	select.innerHTML = htmlCode;
-	select.value = value;
+    const select = document.getElementById("WMSLayersSelect");
+    const value = select.value;
+    let htmlCode = "";
+    W.map.layers.filter(layer => layer.params?.SERVICE === "WMS").forEach(
+        layer => (htmlCode += `<option value='${layer.name}'>${layer.name}</option><br>`));
+    select.innerHTML = htmlCode;
+    select.value = value;
 }
 
 function addNewLayer(id, service, serviceLayers, zIndex = 0, opacity = 1) {
@@ -593,22 +728,6 @@ function getFullRequestString4326(newParams) {
     // Restore state after togglers are created
     restoreLayerTogglerStates();
 
-/*
-changeLog
-
-version: "1.0", message: "Initial Version" },
-version: 2025.02.01.01 - Modified how WMS 4326 image is displayed
-version: 2025.02.01.02 - Added support for Wazewrap update dialogue box
-version: 2025.02.03.01 - Line modification
-version: 2025.03.06.01 - Now LMC HN can be filtered by ward
-version: 2025.04.13.01 - Fixed Combatible with the latest wme beta v2.287-5! Now it monitors the script update!
-version: 2025.05.11.01 - Fixed Z-ordering
-Version: 2025.06.06.01 - Added Bridge Management System bridge locations!
-Version: 2025.06.06.02 - Added Bridge Management System bridge locations!
-                       - Loaded layers will be reloaded even after the page refresh.
-	
-*/
-  
  function scriptupdatemonitor() {
         if (WazeWrap?.Ready) {
             WazeWrap.Interface.ShowScriptUpdate(scriptName, scriptVersion, updateMessage);
@@ -622,5 +741,20 @@ Version: 2025.06.06.02 - Added Bridge Management System bridge locations!
     console.log(`${scriptName} initialized.`);
 
 document.addEventListener("wme-map-data-loaded", init, {once: true});
+/*
+changeLog
 
+version: "1.0", message: "Initial Version" },
+version: 2025.02.01.01 - Modified how WMS 4326 image is displayed
+version: 2025.02.01.02 - Added support for Wazewrap update dialogue box
+version: 2025.02.03.01 - Line modification
+version: 2025.03.06.01 - Now LMC HN can be filtered by ward
+version: 2025.04.13.01 - Fixed Combatible with the latest wme beta v2.287-5! Now it monitors the script update!
+version: 2025.05.11.01 - Fixed Z-ordering
+Version: 2025.06.06.01 - Added Bridge Management System bridge locations!
+Version: 2025.06.06.02 - Added Bridge Management System bridge locations!
+                       - Loaded layers will be reloaded even after the page refresh.
+version: 2025.06.08.01 - Now the WMS layer can be shifted by a specified distance in meters.
+	
+*/
 })();
