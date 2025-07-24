@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2025.06.23.01
+// @version       2025.07.24.01
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://*.waze.com/*/editor*
@@ -15,6 +15,7 @@
 // @require       https://update.greasyfork.org/scripts/509664/WME%20Utils%20-%20Bootstrap.js
 // @downloadURL   https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
 // @updateURL     https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js
+// @connect       geoserver.softwel.com.np
 // ==/UserScript==
 
 /*  Scripts modified from Czech WMS layers (https://greasyfork.org/cs/scripts/35069-czech-wms-layers; https://greasyfork.org/en/scripts/34720-private-czech-wms-layers, https://greasyfork.org/en/scripts/28160) 
@@ -28,7 +29,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 
 (function main() {
   'use strict';
-  const updateMessage = 'Now supports diagonal (↖, ↗, ↙, ↘) layer shifting and shows an alert when the shift is reset.';
+  const updateMessage = 'It now supports to display popup for highway with various information.';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -371,6 +372,280 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     }
     // Restore state after togglers are created
     restoreLayerTogglerStates();
+    /* start of poupup code */
+    // --- WMS GetFeatureInfo popup for SSRN Pavement Layer ---
+    // Only for SSRN Pavement Layer for now
+    const map = W.map.olMap;
+    // Helper: get visible WMS layers for popup
+    function getVisibleWMSLayerInfo() {
+      // List of supported layers for popup
+      const supported = [
+        { key: 'wms_PL2023', service: service_wms_PL2023, queryLayer: 'ssrn:ssrn_pavementstatus', formatFn: formatSSRNFeatureInfo },
+        { key: 'wms_BSM_PH', service: service_wms_BSM_PH, queryLayer: 'prtmp_01:road_network', formatFn: formatBSMFeatureInfo },
+        { key: 'wms_BSM_PR', service: service_wms_BSM_PR, queryLayer: 'prtmp_01:road_network', formatFn: formatBSMFeatureInfo },
+      ];
+      for (const s of supported) {
+        const toggler = WMSLayerTogglers[s.key];
+        if (!toggler) continue;
+        const layer = toggler.layerArray && toggler.layerArray[0] && toggler.layerArray[0].layer;
+        if (layer && layer.getVisibility()) {
+          return { layer, service: s.service, queryLayer: s.queryLayer, formatFn: s.formatFn };
+        }
+      }
+      return null;
+    }
+
+    // Helper: get all visible supported WMS layers for popup
+    function getAllVisibleWMSLayerInfo() {
+      const supported = [
+        { key: 'wms_PL2023', service: service_wms_PL2023, queryLayer: 'ssrn:ssrn_pavementstatus', formatFn: formatSSRNFeatureInfo },
+        { key: 'wms_BSM_PH', service: service_wms_BSM_PH, queryLayer: 'prtmp_01:road_network', formatFn: formatBSMFeatureInfo },
+        { key: 'wms_BSM_PR', service: service_wms_BSM_PR, queryLayer: 'prtmp_01:road_network', formatFn: formatBSMFeatureInfo },
+      ];
+      const visible = [];
+      for (const s of supported) {
+        const toggler = WMSLayerTogglers[s.key];
+        if (!toggler) continue;
+        const layer = toggler.layerArray && toggler.layerArray[0] && toggler.layerArray[0].layer;
+        if (layer && layer.getVisibility()) {
+          visible.push({ layer, service: s.service, queryLayer: s.queryLayer, formatFn: s.formatFn, key: s.key });
+        }
+      }
+      return visible;
+    }
+
+    // Helper: build GetFeatureInfo URL for any supported WMS layer
+    function buildGetFeatureInfoUrl(service, queryLayer, evt) {
+      const wmsUrl = service.url;
+      const bbox = map.getExtent();
+      const width = map.size.w;
+      const height = map.size.h;
+      const x = Math.round(evt.xy.x);
+      const y = Math.round(evt.xy.y);
+      // Try to preserve any CQL_FILTER in the service url
+      let cql = '';
+      if (wmsUrl.includes('CQL_FILTER=')) {
+        const match = wmsUrl.match(/CQL_FILTER=([^&]*)/);
+        if (match) cql = 'CQL_FILTER=' + match[1];
+      }
+      const params = [
+        'SERVICE=WMS',
+        'VERSION=1.3.0',
+        'REQUEST=GetFeatureInfo',
+        'FORMAT=image/png',
+        'TRANSPARENT=true',
+        'QUERY_LAYERS=' + encodeURIComponent(queryLayer),
+        'LAYERS=' + encodeURIComponent(queryLayer),
+        'INFO_FORMAT=application/json',
+        cql,
+        'STYLES=',
+        'TILED=true',
+        'buffer=10',
+        'CRS=EPSG:3857',
+        'WIDTH=' + width,
+        'HEIGHT=' + height,
+        'BBOX=' + bbox.left + ',' + bbox.bottom + ',' + bbox.right + ',' + bbox.top,
+        'I=' + x,
+        'J=' + y,
+      ].filter(Boolean);
+      return wmsUrl.split('?')[0] + '?' + params.join('&');
+    }
+
+    // Helper: show popup at pixel position with content (custom HTML popup)
+    function showWMSPopupAtPixel(pixel, html) {
+      let popup = document.getElementById('wms-info-popup');
+      if (!popup) {
+        popup = document.createElement('div');
+        popup.id = 'wms-info-popup';
+        popup.style.position = 'absolute';
+        popup.style.zIndex = 9999;
+        popup.style.background = 'white';
+        popup.style.border = '2px solid #333';
+        popup.style.borderRadius = '8px';
+        popup.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+        popup.style.padding = '10px 14px 10px 10px';
+        popup.style.minWidth = '220px';
+        popup.style.maxWidth = '350px';
+        popup.style.pointerEvents = 'auto';
+        popup.style.fontSize = '11px';
+        popup.style.fontFamily = 'inherit';
+        popup.style.display = 'block';
+        popup.innerHTML = '';
+        document.body.appendChild(popup);
+      }
+      // Add close button and table styling
+      popup.innerHTML = `
+        <a href="#" id="wms-info-popup-close" style="position:absolute;top:4px;right:8px;font-size:16px;text-decoration:none;color:#888;">&times;</a>
+        <style>
+          #wms-info-popup table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 11px; }
+          #wms-info-popup th, #wms-info-popup td { border: 1px solid #ccc; padding: 2px 6px; text-align: left; font-size: 11px; }
+          #wms-info-popup th { background: #f0f0f0; font-weight: bold; font-size: 11px; }
+          #wms-info-popup tr.alert-success th { background: #d4edda; color: #155724; text-align: center; font-size: 11px; }
+        </style>
+        ${html}
+      `;
+      // Position popup (pixel is {x, y} relative to map viewport)
+      const mapDiv = map.div;
+      const rect = mapDiv.getBoundingClientRect();
+      popup.style.left = rect.left + pixel.x + 10 + 'px';
+      popup.style.top = rect.top + pixel.y - 10 + 'px';
+      popup.style.display = 'block';
+      // Close handler
+      document.getElementById('wms-info-popup-close').onclick = function (e) {
+        e.preventDefault();
+        popup.style.display = 'none';
+      };
+    }
+
+    // Helper: show popup at pixel position with content (custom HTML popup), unique per layer
+    function showWMSPopupAtPixelForLayer(pixel, html, layerKey) {
+      let popupId = 'wms-info-popup-' + layerKey;
+      let popup = document.getElementById(popupId);
+      if (!popup) {
+        popup = document.createElement('div');
+        popup.id = popupId;
+        popup.style.position = 'absolute';
+        popup.style.zIndex = 9999;
+        popup.style.background = 'white';
+        popup.style.border = '2px solid #333';
+        popup.style.borderRadius = '8px';
+        popup.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+        popup.style.padding = '10px 14px 10px 10px';
+        popup.style.minWidth = '220px';
+        popup.style.maxWidth = '350px';
+        popup.style.pointerEvents = 'auto';
+        popup.style.fontSize = '11px';
+        popup.style.fontFamily = 'inherit';
+        popup.style.display = 'block';
+        popup.innerHTML = '';
+        document.body.appendChild(popup);
+      }
+      // Add close button and table styling
+      popup.innerHTML = `
+        <a href="#" id="${popupId}-close" style="position:absolute;top:4px;right:8px;font-size:16px;text-decoration:none;color:#888;">&times;</a>
+        <style>
+          #${popupId} table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 11px; }
+          #${popupId} th, #${popupId} td { border: 1px solid #ccc; padding: 2px 6px; text-align: left; font-size: 11px; }
+          #${popupId} th { background: #f0f0f0; font-weight: bold; font-size: 11px; }
+          #${popupId} tr.alert-success th { background: #d4edda; color: #155724; text-align: center; font-size: 11px; }
+        </style>
+        ${html}
+      `;
+      // Position popup (pixel is {x, y} relative to map viewport)
+      const mapDiv = map.div;
+      const rect = mapDiv.getBoundingClientRect();
+      // Offset each popup horizontally so they don't overlap
+      let offsetX = 10 + 260 * ['wms_PL2023', 'wms_BSM_PH', 'wms_BSM_PR'].indexOf(layerKey);
+      popup.style.left = rect.left + pixel.x + offsetX + 'px';
+      popup.style.top = rect.top + pixel.y - 10 + 'px';
+      popup.style.display = 'block';
+      // Close handler
+      document.getElementById(`${popupId}-close`).onclick = function (e) {
+        e.preventDefault();
+        popup.style.display = 'none';
+      };
+    }
+
+    // Helper: format feature info for SSRN Pavement Layer
+    function formatSSRNFeatureInfo(feature) {
+      const fields = [
+        ['road_code', 'Road Code'],
+        ['link_name', 'Link Name'],
+        ['road_name', 'Road Name'],
+        ['dyear', 'Year'],
+        ['add_date', 'Added'],
+        ['from_ch', 'From chainage'],
+        ['to_ch', 'To chainage'],
+        ['pave_type', 'Pavement type'],
+        ['last_resurface', 'Last Resurface Year'],
+        ['pave_width', 'Pave Width'],
+      ];
+      let html = '<table class="link-table"><tbody>';
+      html += '<tr class="alert-success text-center"><th colspan="2">Strategic Road Network</th></tr>';
+      for (const [key, label] of fields) {
+        html += `<tr><td>${label}: </td><td>${feature.properties[key] || ''}</td></tr>`;
+      }
+      html += '</tbody></table>';
+      return '<div id="popup-content">' + html + '</div>';
+    }
+
+    // Helper: format BSM Province Highways/Roads info
+    function formatBSMFeatureInfo(feature) {
+      const fields = [
+        ['road_code', 'Road Code'],
+        ['road_class', 'Road Class'],
+        ['road_name', 'Road Name'],
+        ['dyear', 'Year'],
+        ['start_ch', 'From chainage'],
+        ['end_ch', 'To chainage'],
+      ];
+      let html = '<table class="link-table"><tbody>';
+      html += '<tr class="alert-success text-center"><th colspan="2">BSM Province Road Info</th></tr>';
+      for (const [key, label] of fields) {
+        html += `<tr><td>${label}: </td><td>${feature.properties[key] || ''}</td></tr>`;
+      }
+      html += '</tbody></table>';
+      return '<div id="popup-content">' + html + '</div>';
+    }
+
+    // Map click handler
+    map.events.register('click', map, function(evt) {
+      console.log('[WMS] Map clicked at', evt.xy, evt.lonlat);
+      const visibleLayers = getAllVisibleWMSLayerInfo();
+      if (!visibleLayers.length) {
+        console.log('[WMS] No supported WMS layer visible for popup.');
+        return;
+      }
+      let responses = 0;
+      let foundFeatures = [];
+      let total = visibleLayers.length;
+      for (const info of visibleLayers) {
+        const url = buildGetFeatureInfoUrl(info.service, info.queryLayer, evt);
+        console.log(`[WMS] GetFeatureInfo URL for ${info.key}:`, url);
+        GM_xmlhttpRequest({
+          method: 'GET',
+          url: url,
+          headers: { 'Accept': 'application/json' },
+          onload: function(response) {
+            responses++;
+            try {
+              const data = JSON.parse(response.responseText);
+              console.log(`[WMS] GetFeatureInfo response for ${info.key}:`, data);
+              if (data.features && data.features.length > 0) {
+                foundFeatures.push({ info, feature: data.features[0] });
+              }
+            } catch (e) {
+              console.log(`[WMS] Error parsing GetFeatureInfo response for ${info.key}:`, e);
+            }
+            if (responses === total) {
+              if (foundFeatures.length > 0) {
+                // Show all found features in one popup at the click location
+                let html = foundFeatures.map(f => f.info.formatFn(f.feature)).join('<hr style="margin:6px 0;">');
+                showWMSPopupAtPixel(evt.xy, html);
+                console.log('[WMS] Popup shown for features:', foundFeatures);
+              } else {
+                // Only log, do not show popup
+                console.log('[WMS] No features found at clicked location.');
+              }
+            }
+          },
+          onerror: function(err) {
+            responses++;
+            console.log(`[WMS] GetFeatureInfo request failed for ${info.key}:`, err);
+            if (responses === total) {
+              if (foundFeatures.length > 0) {
+                let html = foundFeatures.map(f => f.info.formatFn(f.feature)).join('<hr style="margin:6px 0;">');
+                showWMSPopupAtPixel(evt.xy, html);
+              } else {
+                // Only log, do not show popup
+                console.log('[WMS] No features found at clicked location.');
+              }
+            }
+          }
+        });
+      }
+    });
+    /*end of pop up code*/
 
     var GSVlayer = WMSLayerTogglers.xyz_google_streetview.layerArray[0].layer;
     var enteringStreetView = false;
@@ -985,20 +1260,20 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
   document.addEventListener('wme-map-data-loaded', init, { once: true });
   /*
 changeLog
-
-version: "1.0", message: "Initial Version" },
-version: 2025.02.01.01 - Modified how WMS 4326 image is displayed
-version: 2025.02.01.02 - Added support for Wazewrap update dialogue box
-version: 2025.02.03.01 - Line modification
-version: 2025.03.06.01 - Now LMC HN can be filtered by ward
-version: 2025.04.13.01 - Fixed Combatible with the latest wme beta v2.287-5! Now it monitors the script update!
-version: 2025.05.11.01 - Fixed Z-ordering
-Version: 2025.06.06.01 - Added Bridge Management System bridge locations!
-Version: 2025.06.06.02 - Added Bridge Management System bridge locations!
-                       - Loaded layers will be reloaded even after the page refresh.
-version: 2025.06.08.01 - Now the WMS layer can be shifted by a specified distance in meters.
+version: 2025.07.24.01 - It now supports to display popup for highway with various information.
 version: 2025.06.23.01 - Added diagonal (↖, ↗, ↙, ↘) shift buttons for WMS layers.
                        - Shows alert when the shift is reset to default.
+version: 2025.06.08.01 - Now the WMS layer can be shifted by a specified distance in meters.
+Version: 2025.06.06.02 - Added Bridge Management System bridge locations!
+                       - Loaded layers will be reloaded even after the page refresh.
+Version: 2025.06.06.01 - Added Bridge Management System bridge locations!
+version: 2025.05.11.01 - Fixed Z-ordering
+version: 2025.04.13.01 - Fixed Combatible with the latest wme beta v2.287-5! Now it monitors the script update!
+version: 2025.03.06.01 - Now LMC HN can be filtered by ward
+version: 2025.02.03.01 - Line modification
+version: 2025.02.01.02 - Added support for Wazewrap update dialogue box
+version: 2025.02.01.01 - Modified how WMS 4326 image is displayed
+version: "1.0", message: "Initial Version"
 
 */
 })();
