@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2025.07.24.01
+// @version       2025.07.27.05
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://*.waze.com/*/editor*
@@ -10,12 +10,14 @@
 // @namespace     https://greasyfork.org/en/users/1087400-kid4rm90s
 // @license       MIT
 // @grant         GM_xmlhttpRequest
-// @connect       greasyfork.org
 // @require       https://greasyfork.org/scripts/24851-wazewrap/code/WazeWrap.js
 // @require       https://update.greasyfork.org/scripts/509664/WME%20Utils%20-%20Bootstrap.js
+// @require      https://update.greasyfork.org/scripts/516445/1480246/Make%20GM%20xhr%20more%20parallel%20again.js
 // @downloadURL   https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
 // @updateURL     https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js
 // @connect       geoserver.softwel.com.np
+// @connect       localhost:8080
+// @connect       greasyfork.org
 // ==/UserScript==
 
 /*  Scripts modified from Czech WMS layers (https://greasyfork.org/cs/scripts/35069-czech-wms-layers; https://greasyfork.org/en/scripts/34720-private-czech-wms-layers, https://greasyfork.org/en/scripts/28160) 
@@ -28,8 +30,9 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 /* global require */
 
 (function main() {
-  'use strict';
-  const updateMessage = 'It now supports to display popup for highway with various information.';
+  ('use strict');
+  const updateMessage =
+    'Added Layers: Rivers,<br> Education Facilities (PRTMP),<br> Health Facilities (PRTMP),<br> Palika Centre (PRTMP),<br> Ward Centre (PRTMP),<br> Tourist Attraction,<br> Customs Office,<br> National Highways 2023,<br> Province Highways 2023,<br> Province Roads 2023,<br> Bridges (BSM),<br> Bridges (PRTMP),<br> and popup support for above layers and more.';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -50,9 +53,8 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 
     WMSLayersTechSource.tileSizeG = new OL.Size(512, 512);
     WMSLayersTechSource.resolutions = [
-      156543.03390625, 78271.516953125, 39135.7584765625, 19567.87923828125, 9783.939619140625, 4891.9698095703125, 2445.9849047851562, 1222.9924523925781, 611.4962261962891, 305.74811309814453,
-      152.87405654907226, 76.43702827453613, 38.218514137268066, 19.109257068634033, 9.554628534317017, 4.777314267158508, 2.388657133579254, 1.194328566789627, 0.5971642833948135, 0.298582141697406,
-      0.149291070848703, 0.0746455354243515, 0.0373227677121757,
+      156543.03390625, 78271.516953125, 39135.7584765625, 19567.87923828125, 9783.939619140625, 4891.9698095703125, 2445.9849047851562, 1222.9924523925781, 611.4962261962891, 305.74811309814453, 152.87405654907226, 76.43702827453613,
+      38.218514137268066, 19.109257068634033, 9.554628534317017, 4.777314267158508, 2.388657133579254, 1.194328566789627, 0.5971642833948135, 0.298582141697406, 0.149291070848703, 0.0746455354243515, 0.0373227677121757,
     ];
     ZIndexes.base = W.map.olMap.Z_INDEX_BASE.Overlay + 20;
     ZIndexes.overlay = W.map.olMap.Z_INDEX_BASE.Overlay + 100;
@@ -61,29 +63,18 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     // adresy WMS služeb * WMS service addresses
     var service_wms_PL2023 = {
       type: 'WMS',
-      url: 'https://geoserver.softwel.com.np/geoserver/ssrn/wms?CQL_FILTER=dyear%3D%272023%27',
-      attribution: '© Department of Roads Nepal',
+      url: 'https://geoserver.softwel.com.np/geoserver/ows/wms?CQL_FILTER=dyear%3D%272023%27',
+      attribution: '© DoR / Softwel.com.np',
       comment: 'ssrn_PavementLayer2023',
     };
-    var service_wms_BSM_PH = {
+
+    var service_wms_softwel = {
       type: 'WMS',
-      url: 'https://geoserver.softwel.com.np/geoserver/prtmp_01/wms?CQL_FILTER=road_class%3D%27PH%27',
-      attribution: '© Department of Roads Nepal',
-      comment: 'BSM Province Highways 2078/79',
+      url: 'https://geoserver.softwel.com.np/geoserver/ows/wms?',
+      attribution: '© DoR Nepal/Softwel.com.np',
+      comment: 'geoserver softwel.com.np',
     };
-    var service_wms_BSM_PR = {
-      type: 'WMS',
-      url: 'https://geoserver.softwel.com.np/geoserver/prtmp_01/wms?CQL_FILTER=road_class%3D%27PR%27',
-      attribution: '© Department of Roads Nepal',
-      comment: 'BSM Province Roads 2078/79',
-    };
-    var service_wms_SSRN = {
-      type: 'WMS',
-      url: 'https://geoserver.softwel.com.np/geoserver/ssrn/wms?',
-      attribution: '© Department of Roads Nepal',
-      comment: 'National + Province + District Boundaries, Rivers, Junctions',
-    };
-    var service_wms_BSM = { type: 'WMS', url: 'https://geoserver.softwel.com.np/geoserver/bsm/wms?', attribution: '© Department of Roads Nepal', comment: 'Municipalities names and boundaries' };
+
     var service_wms_geoportal = {
       type: 'WMS',
       url: 'https://admin.nationalgeoportal.gov.np/geoserver/wms?',
@@ -100,11 +91,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     //skupiny vrstev v menu * MapTile service addresses
     var service_xyz_livemap = {
       type: 'XYZ',
-      url: [
-        'https://worldtiles1.waze.com/tiles/${z}/${x}/${y}.png?highres=true',
-        'https://worldtiles2.waze.com/tiles/${z}/${x}/${y}.png?highres=true',
-        'https://worldtiles3.waze.com/tiles/${z}/${x}/${y}.png?highres=true',
-      ],
+      url: ['https://worldtiles1.waze.com/tiles/${z}/${x}/${y}.png?highres=true', 'https://worldtiles2.waze.com/tiles/${z}/${x}/${y}.png?highres=true', 'https://worldtiles3.waze.com/tiles/${z}/${x}/${y}.png?highres=true'],
       attribution: "© 2006-2023 Waze Mobile. Všechna práva vyhrazena. <a href='https://www.waze.com/legal/notices' target='_blank'>Poznámky</a>",
       comment: 'Waze Livemapa',
     };
@@ -138,8 +125,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
         'https://mts2.googleapis.com/vt/lyrs=y&x=${x}&y=${y}&z=${z}',
         'https://mts3.googleapis.com/vt/lyrs=y&x=${x}&y=${y}&z=${z}',
       ],
-      attribution:
-        "Snímky ©2023 Landsat / Copernicus, Google, GEODIS Brno, Mapová data ©2023 GeoBasis-DE/BKG (©2009),Google <a href='https://www.google.com/intl/cs_cz/help/terms_maps.html' target='_blank'>Terms and conditions</a>",
+      attribution: "Snímky ©2023 Landsat / Copernicus, Google, GEODIS Brno, Mapová data ©2023 GeoBasis-DE/BKG (©2009),Google <a href='https://www.google.com/intl/cs_cz/help/terms_maps.html' target='_blank'>Terms and conditions</a>",
       comment: 'Google Hybridní Mapy',
     };
     var service_xyz_google_streetview = {
@@ -192,22 +178,30 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 	****************************************************************************/
 
     //MÍSTA * PLACES
-    WMSLayerTogglers.wms_rivers = addLayerToggler(groupTogglerPlaces, 'SSRN Major Rivers', false, [addNewLayer('wms_rivers', service_wms_SSRN, 'ssrn:ssrn_major_river')]);
+    WMSLayerTogglers.wms_rivers = addLayerToggler(groupTogglerPlaces, 'Rivers', false, [addNewLayer('wms_rivers', service_wms_softwel, 'ssrn:ssrn_major_river,npgp:river_nepal')]);
     WMSLayerTogglers.wms_airport = addLayerToggler(groupTogglerPlaces, 'Geoportal Airports', false, [addNewLayer('wms_airport', service_wms_geoportal, 'geonode:Transportation')]);
+    // Separate education facility layers to avoid duplicate labels
+    WMSLayerTogglers.wms_prtmp_education = addLayerToggler(groupTogglerPlaces, 'Education Facilities (PRTMP)', false, [addNewLayer('wms_prtmp_education', service_wms_softwel, 'prtmp_01:prtmp_education')]);
+    WMSLayerTogglers.wms_prtmp_health = addLayerToggler(groupTogglerPlaces, 'Health Facilities (PRTMP)', false, [addNewLayer('wms_prtmp_health', service_wms_softwel, 'prtmp_01:health_facilities')]);
+    WMSLayerTogglers.wms_prtmp_palika = addLayerToggler(groupTogglerPlaces, 'Palika Centre (PRTMP)', false, [addNewLayer('wms_prtmp_palika', service_wms_softwel, 'prtmp_01:palika_center,prtmp_01:palika_center_name')]);
+    WMSLayerTogglers.wms_prtmp_ward = addLayerToggler(groupTogglerPlaces, 'Ward Centre (PRTMP)', false, [addNewLayer('wms_prtmp_ward', service_wms_softwel, 'prtmp_01:prtmp_ward_center')]);
+    WMSLayerTogglers.wms_prtmp_tourist = addLayerToggler(groupTogglerPlaces, 'Tourist Attraction', false, [addNewLayer('wms_prtmp_tourist', service_wms_softwel, 'prtmp_01:tourist_attraction')]);
+    WMSLayerTogglers.wms_prtmp_customs = addLayerToggler(groupTogglerPlaces, 'Customs Office', false, [addNewLayer('wms_prtmp_customs', service_wms_softwel, 'prtmp_01:trade_transit')]);
 
     //SILNICE * ROAD
-    WMSLayerTogglers.wms_PL2023 = addLayerToggler(groupTogglerRoad, 'SSRN Highway Layer 2023', false, [addNewLayer('wms_PL2023', service_wms_PL2023, 'ssrn:ssrn_pavementstatus')]);
-    WMSLayerTogglers.wms_BSM_PH = addLayerToggler(groupTogglerRoad, 'BSM Province Hwy 2078/79', false, [addNewLayer('wms_BSM_PH', service_wms_BSM_PH, 'prtmp_01:road_network')]);
-    WMSLayerTogglers.wms_BSM_PR = addLayerToggler(groupTogglerRoad, 'BSM Province Rd 2078/79', false, [addNewLayer('wms_BSM_PR', service_wms_BSM_PR, 'prtmp_01:road_network')]);
-    WMSLayerTogglers.wms_BSM_Brg1 = addLayerToggler(groupTogglerRoad, 'BSM Bridges New', false, [addNewLayer('wms_BSM_Brg1', service_wms_BSM, 'bsm:bsm_nc_primary_detail,bsm:nc_primary_detail_code')]);
-    WMSLayerTogglers.wms_BSM_Brg2 = addLayerToggler(groupTogglerRoad, 'BSM Bridges Old', false, [addNewLayer('wms_BSM_Brg2', service_wms_BSM, 'bsm:bsm_bi_primary_detail,bsm:bi_primary_detail_code')]);
+    WMSLayerTogglers.wms_PL2023 = addLayerToggler(groupTogglerRoad, 'SSRN Highway 2023', false, [addNewLayer('wms_PL2023', service_wms_PL2023, 'ssrn:ssrn_pavementstatus')]);
+    WMSLayerTogglers.wms_PRTMP_NH = addLayerToggler(groupTogglerRoad, 'NH 2023 (BSM/PRTMP)', false, [addNewLayer('wms_PRTMP_NH', service_wms_softwel, 'prtmp_01:road_network,prtmp_01:road_network_name', "road_class='NH';road_class='NH'")]);
+    WMSLayerTogglers.wms_PRTMP_PH = addLayerToggler(groupTogglerRoad, 'PH 2023 (BSM/PRTMP)', false, [addNewLayer('wms_PRTMP_PH', service_wms_softwel, 'prtmp_01:road_network,prtmp_01:road_network_name', "road_class='PH';road_class='PH'")]);
+    WMSLayerTogglers.wms_PRTMP_PR = addLayerToggler(groupTogglerRoad, 'PR 2023 (BSM/PRTMP)', false, [addNewLayer('wms_PRTMP_PR', service_wms_softwel, 'prtmp_01:road_network,prtmp_01:road_network_name', "road_class='PR';road_class='PR'")]);
+    WMSLayerTogglers.wms_BSM_Bridge = addLayerToggler(groupTogglerRoad, 'Bridges (BSM)', false, [addNewLayer('wms_BSM_Bridge', service_wms_softwel, 'bsm:bsm_nc_primary_detail,bsm:nc_primary_detail_code,bsm:bsm_bi_primary_detail')]);
+    WMSLayerTogglers.wms_prtmp_bridge = addLayerToggler(groupTogglerRoad, 'Bridges (PRTMP)', false, [addNewLayer('wms_prtmp_bridge', service_wms_softwel, 'prtmp_01:bridge_inventory_local,prtmp_01:local_bridge,prtmp_01:major_bridge')]);
 
     //ZOBRAZENÍ * DISPLAY
     // WMSLayerTogglers.wms_orto = addLayerToggler(groupTogglerDisplay, "Ortofoto ČUZK", true, [addNewLayer("wms_orto", service_wms_orto, "GR_ORTFOTORGB", ZIndexes.base)]);
 
     //ČÚZK NÁZVY A ADRESY * ČÚZK NAMES AND ADDRESSES
-    WMSLayerTogglers.wms_mun_name = addLayerToggler(groupTogglerNames, 'BSM Municipality Names', false, [addNewLayer('wms_mun_name', service_wms_BSM, 'bsm:bsm_localbodies_label')]);
-    WMSLayerTogglers.wms_junction_name = addLayerToggler(groupTogglerNames, 'SSRN Junction Names', false, [addNewLayer('wms_junction_name', service_wms_SSRN, 'ssrn:ssrn_junction_name')]);
+    WMSLayerTogglers.wms_mun_name = addLayerToggler(groupTogglerNames, 'BSM Municipality Names', false, [addNewLayer('wms_mun_name', service_wms_softwel, 'bsm:bsm_localbodies_label')]);
+    WMSLayerTogglers.wms_junction_name = addLayerToggler(groupTogglerNames, 'SSRN Junction Names', false, [addNewLayer('wms_junction_name', service_wms_softwel, 'ssrn:ssrn_junction_name')]);
     WMSLayerTogglers.wms_lalitpur_metric_house = addLayerToggler(groupTogglerNames, 'Lalitpur Metric House', false, [
       addNewLayer(
         'wms_lalitpur_metric_house',
@@ -218,15 +212,13 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 
     //ČÚZK HRANICE * BORDER BOARD
     WMSLayerTogglers.wms_geonational = addLayerToggler(groupTogglerBorders, 'Geoportal National Border', false, [addNewLayer('wms_geonational', service_wms_geoportal, 'geonode:nepal')]);
-    WMSLayerTogglers.wms_national = addLayerToggler(groupTogglerBorders, 'SSRN National Border', false, [addNewLayer('wms_national', service_wms_SSRN, 'ssrn:ssrn_national_boundary_line')]);
+    WMSLayerTogglers.wms_national = addLayerToggler(groupTogglerBorders, 'SSRN National Border', false, [addNewLayer('wms_national', service_wms_softwel, 'ssrn:ssrn_national_boundary_line')]);
     WMSLayerTogglers.wms_geoprovince = addLayerToggler(groupTogglerBorders, 'Geoportal Province Border', false, [addNewLayer('wms_geoprovince', service_wms_geoportal, 'geonode:province')]);
-    WMSLayerTogglers.wms_province = addLayerToggler(groupTogglerBorders, 'SSRN Province Border', false, [addNewLayer('wms_province', service_wms_SSRN, 'ssrn:ssrn_province_line')]);
+    WMSLayerTogglers.wms_province = addLayerToggler(groupTogglerBorders, 'SSRN Province Border', false, [addNewLayer('wms_province', service_wms_softwel, 'ssrn:ssrn_province_line')]);
     WMSLayerTogglers.wms_geodistrict = addLayerToggler(groupTogglerBorders, 'Geoportal District Border', false, [addNewLayer('wms_geodistrict', service_wms_geoportal, 'geonode:districts')]);
-    WMSLayerTogglers.wms_district = addLayerToggler(groupTogglerBorders, 'SSRN District Border', false, [addNewLayer('wms_district', service_wms_SSRN, 'ssrn:ssrn_district_boundary_line')]);
-    WMSLayerTogglers.wms_geomunicipality = addLayerToggler(groupTogglerBorders, 'Geoportal Municipality Border', false, [
-      addNewLayer('wms_geomunicipality', service_wms_geoportal, 'geonode:NepalLocalUnits0'),
-    ]);
-    WMSLayerTogglers.wms_municipality = addLayerToggler(groupTogglerBorders, 'BSM Municipality Border', false, [addNewLayer('wms_municipality', service_wms_BSM, 'bsm:bsm_localbodies_line')]);
+    WMSLayerTogglers.wms_district = addLayerToggler(groupTogglerBorders, 'SSRN District Border', false, [addNewLayer('wms_district', service_wms_softwel, 'ssrn:ssrn_district_boundary_line')]);
+    WMSLayerTogglers.wms_geomunicipality = addLayerToggler(groupTogglerBorders, 'Geoportal Municipality Border', false, [addNewLayer('wms_geomunicipality', service_wms_geoportal, 'geonode:NepalLocalUnits0')]);
+    WMSLayerTogglers.wms_municipality = addLayerToggler(groupTogglerBorders, 'BSM Municipality Border', false, [addNewLayer('wms_municipality', service_wms_softwel, 'bsm:bsm_localbodies_line')]);
     WMSLayerTogglers.wms_lalitpur_boundary = addLayerToggler(groupTogglerBorders, 'Lalitpur Ward Boundary', false, [
       addNewLayer(
         'wms_lalitpur_boundary',
@@ -240,100 +232,40 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     WMSLayerTogglers.xyz_google = addLayerToggler(groupTogglerExternal, 'Google Maps', false, [addNewLayer('xyz_google', service_xyz_google)]);
     WMSLayerTogglers.xyz_google_terrain = addLayerToggler(groupTogglerExternal, 'Google Terrain Maps', false, [addNewLayer('xyz_google_terrain', service_xyz_google_terrain)]);
     WMSLayerTogglers.xyz_google_hybrid = addLayerToggler(groupTogglerExternal, 'Google Hybrid Maps', false, [addNewLayer('xyz_google_hybrid', service_xyz_google_hybrid)]);
-    WMSLayerTogglers.xyz_google_streetview = addLayerToggler(groupTogglerExternal, 'Google StreetView', false, [
-      addNewLayer('xyz_google_streetview', service_xyz_google_streetview, null, ZIndexes.popup),
-    ]);
+    WMSLayerTogglers.xyz_google_streetview = addLayerToggler(groupTogglerExternal, 'Google StreetView', false, [addNewLayer('xyz_google_streetview', service_xyz_google_streetview, null, ZIndexes.popup)]);
     WMSLayerTogglers.xyz_osm = addLayerToggler(groupTogglerExternal, 'OpenStreetMaps', false, [addNewLayer('xyz_osm', service_xyz_osm)]);
     WMSLayerTogglers.xyz_april = addLayerToggler(groupTogglerExternal, 'Apríl !!!', false, [addNewLayer('xyz_april', service_xyz_april)]);
 
     //LALITPUR METRO CITY METRIC HOUSE NUMBERING
-    WMSLayerTogglers.wms_lmc_ward1 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 1', false, [
-      addNewLayer('wms_lmc_ward1', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-01_metric_house,geo-lalitpur:lmc_w-01_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward2 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 2', false, [
-      addNewLayer('wms_lmc_ward2', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-02_metric_house,geo-lalitpur:lmc_w-02_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward3 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 3', false, [
-      addNewLayer('wms_lmc_ward3', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-03_metric_house,geo-lalitpur:lmc_w-03_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward4 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 4', false, [
-      addNewLayer('wms_lmc_ward4', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-04_metric_house,geo-lalitpur:lmc_w-04_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward5 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 5', false, [
-      addNewLayer('wms_lmc_ward5', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-05_metric_house,geo-lalitpur:lmc_w-05_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward6 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 6', false, [
-      addNewLayer('wms_lmc_ward6', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-06_metric_house,geo-lalitpur:lmc_w-06_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward7 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 7', false, [
-      addNewLayer('wms_lmc_ward7', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-07_metric_house,geo-lalitpur:lmc_w-07_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward8 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 8', false, [
-      addNewLayer('wms_lmc_ward8', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-08_metric_house,geo-lalitpur:lmc_w-08_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward9 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 9', false, [
-      addNewLayer('wms_lmc_ward9', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-09_metric_house,geo-lalitpur:lmc_w-09_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward10 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 10', false, [
-      addNewLayer('wms_lmc_ward10', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-10_metric_house,geo-lalitpur:lmc_w-10_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward11 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 11', false, [
-      addNewLayer('wms_lmc_ward11', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-11_metric_house,geo-lalitpur:lmc_w-11_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward12 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 12', false, [
-      addNewLayer('wms_lmc_ward12', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-12_metric_house,geo-lalitpur:lmc_w-12_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward13 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 13', false, [
-      addNewLayer('wms_lmc_ward13', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-13_metric_house,geo-lalitpur:lmc_w-13_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward14 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 14', false, [
-      addNewLayer('wms_lmc_ward14', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-14_metric_house,geo-lalitpur:lmc_w-14_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward15 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 15', false, [
-      addNewLayer('wms_lmc_ward15', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-15_metric_house,geo-lalitpur:lmc_w-15_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward16 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 16', false, [
-      addNewLayer('wms_lmc_ward16', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-16_metric_house,geo-lalitpur:lmc_w-16_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward17 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 17', false, [
-      addNewLayer('wms_lmc_ward17', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-17_metric_house,geo-lalitpur:lmc_w-17_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward18 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 18', false, [
-      addNewLayer('wms_lmc_ward18', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-18_metric_house,geo-lalitpur:lmc_w-18_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward19 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 19', false, [
-      addNewLayer('wms_lmc_ward19', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-19_metric_house,geo-lalitpur:lmc_w-19_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward20 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 20', false, [
-      addNewLayer('wms_lmc_ward20', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-20_metric_house,geo-lalitpur:lmc_w-20_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward21 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 21', false, [
-      addNewLayer('wms_lmc_ward21', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-21_metric_house,geo-lalitpur:lmc_w-21_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward22 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 22', false, [
-      addNewLayer('wms_lmc_ward22', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-22_metric_house,geo-lalitpur:lmc_w-22_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward23 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 23', false, [
-      addNewLayer('wms_lmc_ward23', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-23_metric_house,geo-lalitpur:lmc_w-23_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward24 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 24', false, [
-      addNewLayer('wms_lmc_ward24', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-24_metric_house,geo-lalitpur:lmc_w-24_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward25 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 25', false, [
-      addNewLayer('wms_lmc_ward25', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-25_metric_house,geo-lalitpur:lmc_w-25_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward26 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 26', false, [
-      addNewLayer('wms_lmc_ward26', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-26_metric_house,geo-lalitpur:lmc_w-26_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward27 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 27', false, [
-      addNewLayer('wms_lmc_ward27', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-27_metric_house,geo-lalitpur:lmc_w-27_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward28 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 28', false, [
-      addNewLayer('wms_lmc_ward28', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-28_metric_house,geo-lalitpur:lmc_w-28_boundary'),
-    ]);
-    WMSLayerTogglers.wms_lmc_ward29 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 29', false, [
-      addNewLayer('wms_lmc_ward29', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-29_metric_house,geo-lalitpur:lmc_w-29_boundary'),
-    ]);
+    WMSLayerTogglers.wms_lmc_ward1 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 1', false, [addNewLayer('wms_lmc_ward1', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-01_metric_house,geo-lalitpur:lmc_w-01_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward2 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 2', false, [addNewLayer('wms_lmc_ward2', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-02_metric_house,geo-lalitpur:lmc_w-02_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward3 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 3', false, [addNewLayer('wms_lmc_ward3', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-03_metric_house,geo-lalitpur:lmc_w-03_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward4 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 4', false, [addNewLayer('wms_lmc_ward4', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-04_metric_house,geo-lalitpur:lmc_w-04_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward5 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 5', false, [addNewLayer('wms_lmc_ward5', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-05_metric_house,geo-lalitpur:lmc_w-05_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward6 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 6', false, [addNewLayer('wms_lmc_ward6', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-06_metric_house,geo-lalitpur:lmc_w-06_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward7 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 7', false, [addNewLayer('wms_lmc_ward7', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-07_metric_house,geo-lalitpur:lmc_w-07_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward8 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 8', false, [addNewLayer('wms_lmc_ward8', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-08_metric_house,geo-lalitpur:lmc_w-08_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward9 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 9', false, [addNewLayer('wms_lmc_ward9', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-09_metric_house,geo-lalitpur:lmc_w-09_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward10 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 10', false, [addNewLayer('wms_lmc_ward10', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-10_metric_house,geo-lalitpur:lmc_w-10_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward11 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 11', false, [addNewLayer('wms_lmc_ward11', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-11_metric_house,geo-lalitpur:lmc_w-11_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward12 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 12', false, [addNewLayer('wms_lmc_ward12', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-12_metric_house,geo-lalitpur:lmc_w-12_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward13 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 13', false, [addNewLayer('wms_lmc_ward13', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-13_metric_house,geo-lalitpur:lmc_w-13_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward14 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 14', false, [addNewLayer('wms_lmc_ward14', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-14_metric_house,geo-lalitpur:lmc_w-14_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward15 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 15', false, [addNewLayer('wms_lmc_ward15', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-15_metric_house,geo-lalitpur:lmc_w-15_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward16 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 16', false, [addNewLayer('wms_lmc_ward16', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-16_metric_house,geo-lalitpur:lmc_w-16_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward17 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 17', false, [addNewLayer('wms_lmc_ward17', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-17_metric_house,geo-lalitpur:lmc_w-17_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward18 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 18', false, [addNewLayer('wms_lmc_ward18', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-18_metric_house,geo-lalitpur:lmc_w-18_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward19 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 19', false, [addNewLayer('wms_lmc_ward19', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-19_metric_house,geo-lalitpur:lmc_w-19_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward20 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 20', false, [addNewLayer('wms_lmc_ward20', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-20_metric_house,geo-lalitpur:lmc_w-20_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward21 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 21', false, [addNewLayer('wms_lmc_ward21', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-21_metric_house,geo-lalitpur:lmc_w-21_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward22 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 22', false, [addNewLayer('wms_lmc_ward22', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-22_metric_house,geo-lalitpur:lmc_w-22_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward23 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 23', false, [addNewLayer('wms_lmc_ward23', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-23_metric_house,geo-lalitpur:lmc_w-23_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward24 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 24', false, [addNewLayer('wms_lmc_ward24', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-24_metric_house,geo-lalitpur:lmc_w-24_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward25 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 25', false, [addNewLayer('wms_lmc_ward25', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-25_metric_house,geo-lalitpur:lmc_w-25_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward26 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 26', false, [addNewLayer('wms_lmc_ward26', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-26_metric_house,geo-lalitpur:lmc_w-26_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward27 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 27', false, [addNewLayer('wms_lmc_ward27', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-27_metric_house,geo-lalitpur:lmc_w-27_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward28 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 28', false, [addNewLayer('wms_lmc_ward28', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-28_metric_house,geo-lalitpur:lmc_w-28_boundary')]);
+    WMSLayerTogglers.wms_lmc_ward29 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 29', false, [addNewLayer('wms_lmc_ward29', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-29_metric_house,geo-lalitpur:lmc_w-29_boundary')]);
 
     // --- Layer toggler state persistence ---
     function saveLayerTogglerStates() {
@@ -371,62 +303,86 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
       }
     }
     // Restore state after togglers are created
+
     restoreLayerTogglerStates();
-    /* start of poupup code */
+    /*********************  start of popup code ***************************/
     // --- WMS GetFeatureInfo popup for SSRN Pavement Layer ---
-    // Only for SSRN Pavement Layer for now
     const map = W.map.olMap;
-    // Helper: get visible WMS layers for popup
-    function getVisibleWMSLayerInfo() {
-      // List of supported layers for popup
-      const supported = [
-        { key: 'wms_PL2023', service: service_wms_PL2023, queryLayer: 'ssrn:ssrn_pavementstatus', formatFn: formatSSRNFeatureInfo },
-        { key: 'wms_BSM_PH', service: service_wms_BSM_PH, queryLayer: 'prtmp_01:road_network', formatFn: formatBSMFeatureInfo },
-        { key: 'wms_BSM_PR', service: service_wms_BSM_PR, queryLayer: 'prtmp_01:road_network', formatFn: formatBSMFeatureInfo },
-      ];
-      for (const s of supported) {
-        const toggler = WMSLayerTogglers[s.key];
-        if (!toggler) continue;
-        const layer = toggler.layerArray && toggler.layerArray[0] && toggler.layerArray[0].layer;
-        if (layer && layer.getVisibility()) {
-          return { layer, service: s.service, queryLayer: s.queryLayer, formatFn: s.formatFn };
-        }
-      }
-      return null;
-    }
 
     // Helper: get all visible supported WMS layers for popup
     function getAllVisibleWMSLayerInfo() {
       const supported = [
-        { key: 'wms_PL2023', service: service_wms_PL2023, queryLayer: 'ssrn:ssrn_pavementstatus', formatFn: formatSSRNFeatureInfo },
-        { key: 'wms_BSM_PH', service: service_wms_BSM_PH, queryLayer: 'prtmp_01:road_network', formatFn: formatBSMFeatureInfo },
-        { key: 'wms_BSM_PR', service: service_wms_BSM_PR, queryLayer: 'prtmp_01:road_network', formatFn: formatBSMFeatureInfo },
+        { key: 'wms_rivers', service: service_wms_softwel, queryLayer: 'ssrn:ssrn_major_river,npgp:river_nepal', displayName: 'Rivers', formatFn: (feature) => formatFeatureInfo('RIVER', feature) },
+        { key: 'wms_prtmp_education', service: service_wms_softwel, queryLayer: 'prtmp_01:prtmp_education', displayName: 'Education Facilities (PRTMP)', formatFn: (feature) => formatFeatureInfo('EDUCATION', feature) },
+        { key: 'wms_prtmp_health', service: service_wms_softwel, queryLayer: 'prtmp_01:health_facilities', displayName: 'Health Facilities (PRTMP)', formatFn: (feature) => formatFeatureInfo('HEALTH', feature) },
+        { key: 'wms_prtmp_palika', service: service_wms_softwel, queryLayer: 'prtmp_01:palika_center', displayName: 'Palika Centre (PRTMP)', formatFn: (feature) => formatFeatureInfo('PALIKA', feature) },
+        { key: 'wms_prtmp_ward', service: service_wms_softwel, queryLayer: 'prtmp_01:prtmp_ward_center', displayName: 'Ward Centre (PRTMP)', formatFn: (feature) => formatFeatureInfo('WARD', feature) },
+        { key: 'wms_prtmp_tourist', service: service_wms_softwel, queryLayer: 'prtmp_01:tourist_attraction', displayName: 'Tourist Attraction', formatFn: (feature) => formatFeatureInfo('TOURIST', feature) },
+        { key: 'wms_prtmp_customs', service: service_wms_softwel, queryLayer: 'prtmp_01:trade_transit', displayName: 'Customs Office', formatFn: (feature) => formatFeatureInfo('CUSTOMS', feature) },
+        { key: 'wms_PL2023', service: service_wms_PL2023, queryLayer: 'ssrn:ssrn_pavementstatus', displayName: 'SSRN Highway 2023', formatFn: (feature) => formatFeatureInfo('SSRN', feature) },
+        { key: 'wms_PRTMP_NH', service: service_wms_softwel, queryLayer: 'prtmp_01:road_network', displayName: 'NH 2023 (BSM/PRTMP)', formatFn: (feature) => formatFeatureInfo('BSM', feature), cqlFilter: "road_class='NH'" },
+        { key: 'wms_PRTMP_PH', service: service_wms_softwel, queryLayer: 'prtmp_01:road_network', displayName: 'PH 2023 (BSM/PRTMP)', formatFn: (feature) => formatFeatureInfo('BSM', feature), cqlFilter: "road_class='PH'" },
+        { key: 'wms_PRTMP_PR', service: service_wms_softwel, queryLayer: 'prtmp_01:road_network', displayName: 'PR 2023 (BSM/PRTMP)', formatFn: (feature) => formatFeatureInfo('BSM', feature), cqlFilter: "road_class='PR'" },
+        {
+          key: 'wms_BSM_Bridge',
+          service: service_wms_softwel,
+          queryLayer: 'bsm:bsm_nc_primary_detail,bsm:nc_primary_detail_code,bsm:bsm_bi_primary_detail',
+          displayName: 'Bridges (BSM)',
+          formatFn: (feature) => formatFeatureInfo('BRIDGE', feature),
+        },
+        {
+          key: 'wms_prtmp_bridge',
+          service: service_wms_softwel,
+          queryLayer: 'prtmp_01:bridge_inventory_local,prtmp_01:local_bridge,prtmp_01:major_bridge',
+          displayName: 'Bridges (PRTMP)',
+          formatFn: (feature) => formatFeatureInfo('BRIDGE', feature),
+        },
       ];
       const visible = [];
       for (const s of supported) {
         const toggler = WMSLayerTogglers[s.key];
-        if (!toggler) continue;
+        if (!toggler) {
+          continue;
+        }
         const layer = toggler.layerArray && toggler.layerArray[0] && toggler.layerArray[0].layer;
         if (layer && layer.getVisibility()) {
-          visible.push({ layer, service: s.service, queryLayer: s.queryLayer, formatFn: s.formatFn, key: s.key });
+          visible.push({ layer, service: s.service, queryLayer: s.queryLayer, formatFn: s.formatFn, key: s.key, displayName: s.displayName, cqlFilter: s.cqlFilter });
         }
       }
       return visible;
     }
 
     // Helper: build GetFeatureInfo URL for any supported WMS layer
-    function buildGetFeatureInfoUrl(service, queryLayer, evt) {
+    function buildGetFeatureInfoUrl(service, queryLayer, evt, cqlFilter = null) {
       const wmsUrl = service.url;
       const bbox = map.getExtent();
       const width = map.size.w;
       const height = map.size.h;
       const x = Math.round(evt.xy.x);
       const y = Math.round(evt.xy.y);
-      // Try to preserve any CQL_FILTER in the service url
+
+      // Handle CQL filters - priority: parameter > service URL
       let cql = '';
-      if (wmsUrl.includes('CQL_FILTER=')) {
+      if (cqlFilter) {
+        cql = 'CQL_FILTER=' + encodeURIComponent(cqlFilter);
+        console.log('[WMS DEBUG] Using layer-specific CQL filter for GetFeatureInfo:', cqlFilter);
+      } else if (wmsUrl.includes('CQL_FILTER=')) {
         const match = wmsUrl.match(/CQL_FILTER=([^&]*)/);
-        if (match) cql = 'CQL_FILTER=' + match[1];
+        if (match) {
+          cql = 'CQL_FILTER=' + match[1];
+          console.log('[WMS DEBUG] Using service URL CQL filter for GetFeatureInfo:', decodeURIComponent(match[1]));
+        }
+      }
+
+      // Determine CRS: use map.projection or fallback to EPSG:3857
+      let crs = 'EPSG:3857';
+      if (map.projection && (map.projection === 'EPSG:4326' || map.projection === 'EPSG:3857')) {
+        crs = map.projection;
+      }
+      // Optionally add FEATURE_COUNT if present in service config
+      let featureCount = '';
+      if (service.featureCount) {
+        featureCount = 'FEATURE_COUNT=' + service.featureCount;
       }
       const params = [
         'SERVICE=WMS',
@@ -441,14 +397,20 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
         'STYLES=',
         'TILED=true',
         'buffer=10',
-        'CRS=EPSG:3857',
+        'CRS=' + crs,
         'WIDTH=' + width,
         'HEIGHT=' + height,
         'BBOX=' + bbox.left + ',' + bbox.bottom + ',' + bbox.right + ',' + bbox.top,
         'I=' + x,
         'J=' + y,
+        featureCount,
       ].filter(Boolean);
-      return wmsUrl.split('?')[0] + '?' + params.join('&');
+
+      const finalUrl = wmsUrl.split('?')[0] + '?' + params.join('&');
+      if (cqlFilter) {
+        console.log('[WMS DEBUG] GetFeatureInfo URL with CQL filter:', finalUrl);
+      }
+      return finalUrl;
     }
 
     // Helper: show popup at pixel position with content (custom HTML popup)
@@ -535,7 +497,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
       const mapDiv = map.div;
       const rect = mapDiv.getBoundingClientRect();
       // Offset each popup horizontally so they don't overlap
-      let offsetX = 10 + 260 * ['wms_PL2023', 'wms_BSM_PH', 'wms_BSM_PR'].indexOf(layerKey);
+      let offsetX = 10 + 260 * ['wms_PL2023', 'wms_PRTMP_PH', 'wms_PRTMP_PR'].indexOf(layerKey);
       popup.style.left = rect.left + pixel.x + offsetX + 'px';
       popup.style.top = rect.top + pixel.y - 10 + 'px';
       popup.style.display = 'block';
@@ -545,51 +507,141 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
         popup.style.display = 'none';
       };
     }
+    // Helper: format feature info for popup based on type
+    function formatFeatureInfo(type, feature) {
+      // Define field sets and titles for each type
+      const configs = {
+        SSRN: {
+          title: (feature) => feature.layerName || 'Strategic Road Network',
+          fields: [
+            ['road_code', 'Road Code'],
+            ['link_name', 'Link Name'],
+            ['road_name', 'Road Name'],
+            ['from_ch', 'From chainage'],
+            ['to_ch', 'To chainage'],
+            ['pave_type', 'Pavement type'],
+            ['last_resurface', 'Last Resurface Year'],
+            ['pave_width', 'Pave Width'],
+            ['dyear', 'Year'],
+            ['add_date', 'Added'],
+          ],
+        },
+        BSM: {
+          title: (feature) => feature.layerName || 'BSM Province Road Info',
+          fields: [
+            ['road_code', 'Road Code'],
+            ['road_class', 'Road Class'],
+            ['road_name', 'Road Name'],
+            ['pcode', 'Province'],
+            ['start_ch', 'From chainage'],
+            ['end_ch', 'To chainage'],
+            ['dyear', 'Year'],
+            ['add_date', 'Added'],
+          ],
+        },
+        EDUCATION: {
+          title: (feature) => feature.layerName || 'Education Facilities',
+          fields: [
+            ['name', 'School Name'],
+            ['loc_bodies', 'Mun Name'],
+            ['district', 'District'],
+          ],
+        },
+        HEALTH: {
+          title: (feature) => feature.layerName || 'Health Facilities',
+          fields: [
+            ['hf_name', 'Name'],
+            ['category', 'Category'],
+            ['loc_bodies', 'Mun Name'],
+            ['ward', 'Ward'],
+            ['district', 'District'],
+            ['province', 'Province'],
+          ],
+        },
+        RIVER: {
+          title: (feature) => feature.layerName || 'River Features',
+          fields: [['riv_name', 'Name']],
+        },
+        PALIKA: {
+          title: (feature) => feature.layerName || 'Palika Centre',
+          fields: [
+            ['loc_bod', 'Name Eng'],
+            ['dist_name', 'District Eng'],
+            ['province', 'Province'],
+            ['palika_nep', 'Palika NP'],
+            ['dist_nep', 'District NP'],
+          ],
+        },
+        WARD: {
+          title: (feature) => feature.layerName || 'Ward Centre',
+          fields: [
+            ['pcode', 'Province'],
+            ['loc_name', 'Name'],
+            ['type_gn', 'Type'],
+            ['ward_no', 'Ward No'],
+          ],
+        },
+        TOURIST: {
+          title: (feature) => feature.layerName || 'Tourist Attraction',
+          fields: [
+            ['pcode', 'Province'],
+            ['name', 'Name'],
+            ['district', 'District'],
+          ],
+        },
+        CUSTOMS: {
+          title: (feature) => feature.layerName || 'Customs Office',
+          fields: [
+            ['pcode', 'Province'],
+            ['name', 'Name'],
+            ['district', 'District'],
+          ],
+        },
+        BRIDGE: {
+          title: (feature) => feature.layerName || 'Bridge',
+          fields: [
+            ['pcode', 'Province'],
+            [['name', 'bridge_name'], 'Bridge Name'], // Array of fallback field names
+            [['bridge_id', 'bridge_no', 'new_bridge_no'], 'Bridge ID'], // Array of fallback field names
+            ['bridge_length', 'Bridge Length'],
+            [['river', 'river_name'], 'River'], // Array of fallback field names
+            ['road', 'Road Name'], // Array of fallback field names
+            ['district', 'District'],
+            ['updated_date', 'Updated Date'],
+          ],
+        },
+      };
 
-    // Helper: format feature info for SSRN Pavement Layer
-    function formatSSRNFeatureInfo(feature) {
-      const fields = [
-        ['road_code', 'Road Code'],
-        ['link_name', 'Link Name'],
-        ['road_name', 'Road Name'],
-        ['dyear', 'Year'],
-        ['add_date', 'Added'],
-        ['from_ch', 'From chainage'],
-        ['to_ch', 'To chainage'],
-        ['pave_type', 'Pavement type'],
-        ['last_resurface', 'Last Resurface Year'],
-        ['pave_width', 'Pave Width'],
-      ];
-      let html = '<table class="link-table"><tbody>';
-      html += '<tr class="alert-success text-center"><th colspan="2">Strategic Road Network</th></tr>';
-      for (const [key, label] of fields) {
-        html += `<tr><td>${label}: </td><td>${feature.properties[key] || ''}</td></tr>`;
-      }
-      html += '</tbody></table>';
-      return '<div id="popup-content">' + html + '</div>';
-    }
+      const config = configs[type];
+      if (!config) return '<div>No info available</div>';
 
-    // Helper: format BSM Province Highways/Roads info
-    function formatBSMFeatureInfo(feature) {
-      const fields = [
-        ['road_code', 'Road Code'],
-        ['road_class', 'Road Class'],
-        ['road_name', 'Road Name'],
-        ['dyear', 'Year'],
-        ['start_ch', 'From chainage'],
-        ['end_ch', 'To chainage'],
-      ];
+      // Always use user-friendly display name if present
+      let layerTitle = feature.layerName; // || (typeof config.title === 'function' ? config.title(feature) : config.title);
+
       let html = '<table class="link-table"><tbody>';
-      html += '<tr class="alert-success text-center"><th colspan="2">BSM Province Road Info</th></tr>';
-      for (const [key, label] of fields) {
-        html += `<tr><td>${label}: </td><td>${feature.properties[key] || ''}</td></tr>`;
+      html += `<tr class="alert-success text-center"><th colspan="2">${layerTitle}</th></tr>`;
+      for (const [key, label] of config.fields) {
+        let value = '';
+        if (Array.isArray(key)) {
+          // Handle fallback field names - try each key until we find a value
+          for (const fallbackKey of key) {
+            if (feature.properties[fallbackKey]) {
+              value = feature.properties[fallbackKey];
+              break;
+            }
+          }
+        } else {
+          // Single field name
+          value = feature.properties[key] || '';
+        }
+        html += `<tr><td>${label}: </td><td>${value}</td></tr>`;
       }
       html += '</tbody></table>';
       return '<div id="popup-content">' + html + '</div>';
     }
 
     // Map click handler
-    map.events.register('click', map, function(evt) {
+    map.events.register('click', map, function (evt) {
       console.log('[WMS] Map clicked at', evt.xy, evt.lonlat);
       const visibleLayers = getAllVisibleWMSLayerInfo();
       if (!visibleLayers.length) {
@@ -600,48 +652,58 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
       let foundFeatures = [];
       let total = visibleLayers.length;
       for (const info of visibleLayers) {
-        const url = buildGetFeatureInfoUrl(info.service, info.queryLayer, evt);
+        const url = buildGetFeatureInfoUrl(info.service, info.queryLayer, evt, info.cqlFilter);
         console.log(`[WMS] GetFeatureInfo URL for ${info.key}:`, url);
         GM_xmlhttpRequest({
           method: 'GET',
           url: url,
-          headers: { 'Accept': 'application/json' },
-          onload: function(response) {
+          headers: { Accept: 'application/json' },
+          onload: function (response) {
             responses++;
             try {
               const data = JSON.parse(response.responseText);
               console.log(`[WMS] GetFeatureInfo response for ${info.key}:`, data);
               if (data.features && data.features.length > 0) {
-                foundFeatures.push({ info, feature: data.features[0] });
+                // For combined layers, deduplicate features by name to avoid showing identical entries
+                const uniqueFeatures = [];
+                const seenNames = new Set();
+
+                for (let feature of data.features) {
+                  // Use the facility name as the deduplication key
+                  const facilityName = feature.properties?.name || feature.properties?.hf_name || feature.properties?.riv_name || 'unnamed';
+
+                  if (!seenNames.has(facilityName)) {
+                    seenNames.add(facilityName);
+                    feature.layerName = info.displayName;
+                    uniqueFeatures.push({ info, feature });
+                  }
+                }
+
+                // Add all unique features to the foundFeatures array
+                foundFeatures.push(...uniqueFeatures);
               }
             } catch (e) {
-              console.log(`[WMS] Error parsing GetFeatureInfo response for ${info.key}:`, e);
+              console.error(`[WMS] Error parsing GetFeatureInfo response for ${info.key}:`, e);
             }
             if (responses === total) {
               if (foundFeatures.length > 0) {
                 // Show all found features in one popup at the click location
-                let html = foundFeatures.map(f => f.info.formatFn(f.feature)).join('<hr style="margin:6px 0;">');
+                let html = foundFeatures.map((f) => f.info.formatFn(f.feature)).join('<hr style="margin:6px 0;">');
                 showWMSPopupAtPixel(evt.xy, html);
                 console.log('[WMS] Popup shown for features:', foundFeatures);
-              } else {
-                // Only log, do not show popup
-                console.log('[WMS] No features found at clicked location.');
               }
             }
           },
-          onerror: function(err) {
+          onerror: function (err) {
             responses++;
-            console.log(`[WMS] GetFeatureInfo request failed for ${info.key}:`, err);
+            console.error(`[WMS] GetFeatureInfo request failed for ${info.key}:`, err);
             if (responses === total) {
               if (foundFeatures.length > 0) {
-                let html = foundFeatures.map(f => f.info.formatFn(f.feature)).join('<hr style="margin:6px 0;">');
+                let html = foundFeatures.map((f) => f.info.formatFn(f.feature)).join('<hr style="margin:6px 0;">');
                 showWMSPopupAtPixel(evt.xy, html);
-              } else {
-                // Only log, do not show popup
-                console.log('[WMS] No features found at clicked location.');
               }
             }
-          }
+          },
         });
       }
     });
@@ -979,6 +1041,13 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     }
     switch (service.type) {
       case 'WMS':
+        // Debug log for WMS request URL and filter
+        if (typeof zIndex === 'string' && zIndex.includes("road_class='")) {
+          console.log('[WMS DEBUG] Creating WMS Layer:', id);
+          console.log('[WMS DEBUG] Service URL:', service.url);
+          console.log('[WMS DEBUG] Layers:', serviceLayers);
+          console.log('[WMS DEBUG] Filter:', zIndex);
+        }
         newLayer.layer = new OL.Layer.WMS(
           id,
           service.url,
@@ -986,6 +1055,8 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
             layers: serviceLayers,
             transparent: 'true',
             format: 'image/png',
+            version: service.version || '1.3.0', // Use service.version if provided, else default to 1.3.0 use WMS 1.3.0 + EPSG:3857
+            CQL_FILTER: typeof zIndex === 'string' ? zIndex : undefined,
           },
           {
             opacity: opacity,
@@ -1006,6 +1077,8 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
             layers: serviceLayers,
             transparent: 'true',
             format: 'image/png',
+            version: service.version || '1.1.1', //use WMS 1.1.1 + EPSG:4326
+            CQL_FILTER: typeof zIndex === 'string' ? zIndex : undefined,
           },
           {
             opacity: opacity,
@@ -1037,6 +1110,18 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     }
     return newLayer;
   }
+  /*For GeoServer WMS:
+
+WMS 1.1.1 prefers coordinates in EPSG:4326 (longitude, latitude order).
+WMS 1.3.0 uses EPSG:4326 (latitude, longitude order) and supports EPSG:3857 (Web Mercator) natively.
+Recommendations:
+
+If your client expects (longitude, latitude) order, use WMS 1.1.1 with EPSG:4326.
+If your client expects (latitude, longitude) order or uses web maps (Google, OSM), use WMS 1.3.0 with EPSG:3857.
+Summary:
+
+For web mapping (slippy maps), use WMS 1.3.0 + EPSG:3857.
+For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
 
   function addGroupToggler(isDefault, layerSwitcherGroupItemName, layerGroupVisibleName) {
     var group;
@@ -1260,6 +1345,20 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
   document.addEventListener('wme-map-data-loaded', init, { once: true });
   /*
 changeLog
+version: 2025.07.27.1 - Added Layers:
+  - Rivers
+  - Education Facilities (PRTMP)
+  - Health Facilities (PRTMP)
+  - Palika Centre (PRTMP)
+  - Ward Centre (PRTMP)
+  - Tourist Attraction
+  - Customs Office
+  - National Highways 2023
+  - Province Highways 2023
+  - Province Roads 2023
+  - Bridges (BSM)
+  - Bridges (PRTMP)
+  - and popup support for above layers and more.
 version: 2025.07.24.01 - It now supports to display popup for highway with various information.
 version: 2025.06.23.01 - Added diagonal (↖, ↗, ↙, ↘) shift buttons for WMS layers.
                        - Shows alert when the shift is reset to default.
