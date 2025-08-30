@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2025.08.30.01
+// @version       2025.08.31.01
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://*.waze.com/*/editor*
@@ -58,7 +58,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     ];
     ZIndexes.base = W.map.olMap.Z_INDEX_BASE.Overlay + 20;
     ZIndexes.overlay = W.map.olMap.Z_INDEX_BASE.Overlay + 100;
-    ZIndexes.popup = W.map.olMap.Z_INDEX_BASE.Overlay + 1000;
+    ZIndexes.popup = W.map.olMap.Z_INDEX_BASE.Overlay + 500;
 
     // adresy WMS služeb * WMS service addresses
     var service_wms_PL2023 = {
