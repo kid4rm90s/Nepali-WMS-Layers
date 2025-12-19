@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2025.11.29.01
+// @version       2025.12.19.01
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://*.waze.com/*/editor*
@@ -32,8 +32,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 
 (function main() {
   ('use strict');
-  const updateMessage =
-    '<strong>Added Layers :</strong><br> - Health Facilities from National Geoportal,<br> - Police Units from National Geoportal.';
+  const updateMessage = '<strong>Fixed :</strong><br> - Delayed loading of WMS layers to ensure map data is fully loaded.';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -1367,9 +1366,12 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
   wmeSDK = bootstrap({ scriptUpdateMonitor: { downloadUrl } });
   console.log(`${scriptName} initialized.`);
 
-  document.addEventListener('wme-map-data-loaded', init, { once: true });
+  //document.addEventListener('wme-map-data-loaded', init, { once: true });
+  document.addEventListener('wme-map-data-loaded', () => setTimeout(init, 2000), { once: true });
   /*
 changeLog
+2025.12.05.01
+- Added delayed loading of WMS layers to ensure map data is fully loaded.
 2025.11.29.01
 - Added layers: Health Facilities from National Geoportal, Police Units from National Geoportal.
 2025.08.30.01
