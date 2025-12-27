@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2025.12.19.01
+// @version       2025.12.27.01
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://*.waze.com/*/editor*
@@ -10,8 +10,7 @@
 // @namespace     https://greasyfork.org/en/users/1087400-kid4rm90s
 // @license       MIT
 // @grant         GM_xmlhttpRequest
-// @require       https://greasyfork.org/scripts/24851-wazewrap/code/WazeWrap.js
-// @require       https://update.greasyfork.org/scripts/509664/WME%20Utils%20-%20Bootstrap.js
+// @require       https://kid4rm90s.github.io/WazeToastr/WazeToastr.js
 // @require      https://update.greasyfork.org/scripts/516445/1480246/Make%20GM%20xhr%20more%20parallel%20again.js
 // @downloadURL   https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
 // @updateURL     https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js
@@ -19,20 +18,21 @@
 // @connect       admin.nationalgeoportal.gov.np
 // @connect       localhost:8080
 // @connect       greasyfork.org
+// @connect       github.io
 // ==/UserScript==
 
 /*  Scripts modified from Czech WMS layers (https://greasyfork.org/cs/scripts/35069-czech-wms-layers; https://greasyfork.org/en/scripts/34720-private-czech-wms-layers, https://greasyfork.org/en/scripts/28160) 
 orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https://greasyfork.org/en/scripts/519676-croatian-wms-layers) author: JS55CT */
 
 /* global W */
-/* global WazeWrap */
+/* global WazeToastr */
 /* global $ */
 /* global OpenLayers */
 /* global require */
 
 (function main() {
   ('use strict');
-  const updateMessage = '<strong>Fixed :</strong><br> - Delayed loading of WMS layers to ensure map data is fully loaded.';
+  const updateMessage = '<strong>Fixed :</strong><br> - Temporary fix for alerts not displaying properly.';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -978,8 +978,8 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
       if (!wmsLayerOriginalOffsets[layer.name]) {
         wmsLayerOriginalOffsets[layer.name] = { x: 0, y: 0 };
       }
-      // Show WazeWrap alert
-      WazeWrap.Alerts.info('Layer Shifted', `Layer shifted to ${dist} metres ${direction}. Please wait for fully load.`, false, false, 2000);
+      // Show WazeToastr alert
+      WazeToastr.Alerts.info('Layer Shifted', `Layer shifted to ${dist} metres ${direction}. Please wait for fully load.`, false, false, 2000);
       layer.redraw();
     }
     btnUp.addEventListener('click', function () {
@@ -1016,8 +1016,8 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
       patchWMSLayerGetURL(layer);
       wmsLayerOffsets[layer.name] = { x: 0, y: 0 };
       layer.redraw();
-      // Show WazeWrap alert on reset
-      WazeWrap.Alerts.info('Layer Reset', 'Layer shift has been reset to default.', false, false, 2000);
+      // Show WazeToastr alert on reset
+      WazeToastr.Alerts.info('Layer Reset', 'Layer shift has been reset to default.', false, false, 2000);
     });
 
     tabPane.appendChild(section);
@@ -1354,22 +1354,29 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
   // Restore state after togglers are created
   restoreLayerTogglerStates();
 
-  function scriptupdatemonitor() {
-    if (WazeWrap?.Ready) {
-      WazeWrap.Interface.ShowScriptUpdate(scriptName, scriptVersion, updateMessage);
-    } else {
-      setTimeout(scriptupdatemonitor, 250);
-    }
+function scriptupdatemonitor() {
+  if (WazeToastr?.Ready) {
+    // Create and start the ScriptUpdateMonitor
+    const updateMonitor = new WazeToastr.Alerts.ScriptUpdateMonitor(scriptName, scriptVersion, downloadUrl, GM_xmlhttpRequest);
+
+    // Check immediately on page load, then every 2 hours
+    updateMonitor.start(2, true); // checkImmediately = true
+
+    // Show the update dialog for the current version
+    WazeToastr.Interface.ShowScriptUpdate(scriptName, scriptVersion, updateMessage, downloadUrl);
+  } else {
+    setTimeout(scriptupdatemonitor, 250);
   }
-  // Start the "scriptupdatemonitor"
-  scriptupdatemonitor();
-  wmeSDK = bootstrap({ scriptUpdateMonitor: { downloadUrl } });
-  console.log(`${scriptName} initialized.`);
+}
+scriptupdatemonitor();
+console.log(`${scriptName} initialized.`);
 
   //document.addEventListener('wme-map-data-loaded', init, { once: true });
   document.addEventListener('wme-map-data-loaded', () => setTimeout(init, 2000), { once: true });
   /*
 changeLog
+2025.12.27.00
+- Temporary Fix for alert not displaying issue.
 2025.12.05.01
 - Added delayed loading of WMS layers to ensure map data is fully loaded.
 2025.11.29.01
@@ -1401,7 +1408,7 @@ version: 2025.05.11.01 - Fixed Z-ordering
 version: 2025.04.13.01 - Fixed Combatible with the latest wme beta v2.287-5! Now it monitors the script update!
 version: 2025.03.06.01 - Now LMC HN can be filtered by ward
 version: 2025.02.03.01 - Line modification
-version: 2025.02.01.02 - Added support for Wazewrap update dialogue box
+version: 2025.02.01.02 - Added support for WazeToastr update dialogue box
 version: 2025.02.01.01 - Modified how WMS 4326 image is displayed
 version: "1.0", message: "Initial Version"
 
