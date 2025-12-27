@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2025.12.27.01
+// @version       2025.12.27.02
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://*.waze.com/*/editor*
@@ -18,7 +18,6 @@
 // @connect       admin.nationalgeoportal.gov.np
 // @connect       localhost:8080
 // @connect       greasyfork.org
-// @connect       github.io
 // ==/UserScript==
 
 /*  Scripts modified from Czech WMS layers (https://greasyfork.org/cs/scripts/35069-czech-wms-layers; https://greasyfork.org/en/scripts/34720-private-czech-wms-layers, https://greasyfork.org/en/scripts/28160) 
