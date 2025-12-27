@@ -10,7 +10,7 @@
 // @namespace     https://greasyfork.org/en/users/1087400-kid4rm90s
 // @license       MIT
 // @grant         GM_xmlhttpRequest
-// @require       https://kid4rm90s.github.io/WazeToastr/WazeToastr.js
+// @require       https://cdn.jsdelivr.net/gh/kid4rm90s/WazeToastr@master/WazeToastr.js
 // @require      https://update.greasyfork.org/scripts/516445/1480246/Make%20GM%20xhr%20more%20parallel%20again.js
 // @downloadURL   https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
 // @updateURL     https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js
