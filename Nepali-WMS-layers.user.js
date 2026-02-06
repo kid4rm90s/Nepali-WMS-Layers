@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2025.12.27.03
+// @version       2026.02.06.01
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
-// @match         https://*.waze.com/*/editor*
-// @match         https://*.waze.com/editor
-// @exclude       https://*.waze.com/user/editor*
+// @match         https://www.waze.com/*/editor*
+// @match         https://www.waze.com/editor*
+// @match         https://beta.waze.com/*
+// @exclude       https://www.waze.com/*user/*editor/*
 // @run-at        document-end
 // @namespace     https://greasyfork.org/en/users/1087400-kid4rm90s
 // @license       MIT
@@ -18,6 +19,7 @@
 // @connect       admin.nationalgeoportal.gov.np
 // @connect       localhost:8080
 // @connect       greasyfork.org
+// @connect       geonep.com.np
 // ==/UserScript==
 
 /*  Scripts modified from Czech WMS layers (https://greasyfork.org/cs/scripts/35069-czech-wms-layers; https://greasyfork.org/en/scripts/34720-private-czech-wms-layers, https://greasyfork.org/en/scripts/28160) 
@@ -31,7 +33,8 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 
 (function main() {
   ('use strict');
-  const updateMessage = '<strong>Fixed :</strong><br> - Temporary fix for alerts not displaying properly.';
+  const updateMessage =
+'<strong>New Feature:</strong><br> - Load GeoJSON from URL (LMC Ward Buildings from geonep.com.np)';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -43,6 +46,146 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
   var I18n;
   var ZIndexes = {};
   var WMSLayerTogglers = {};
+  var loadedGeoJSONLayers = [];
+  var geoJsonLayerOffsets = {};
+
+  // Helper: update GeoJSON layer selector dropdown
+  function updateGeoJsonLayerSelector() {
+    const select = document.getElementById('geoJsonLayerSelect');
+    if (!select) return;
+
+    // Clear existing options except first (default)
+    while (select.options.length > 1) {
+      select.remove(1);
+    }
+
+    // Add options for each loaded layer
+    loadedGeoJSONLayers.forEach(layerInfo => {
+      const option = document.createElement('option');
+      option.value = layerInfo.name;
+      option.textContent = layerInfo.name;
+      select.appendChild(option);
+    });
+
+    // Reset to default if no layers
+    if (loadedGeoJSONLayers.length === 0) {
+      select.selectedIndex = 0;
+    }
+  }
+
+  // Helper: shift GeoJSON layer
+  function shiftGeoJsonLayer(direction) {
+    const selectElem = document.getElementById('geoJsonLayerSelect');
+    const distInput = document.getElementById('geoJsonShiftDistance');
+    
+    if (!selectElem || !distInput) return;
+    
+    const layerName = selectElem.value;
+    const dist = parseFloat(distInput.value) || 0;
+    
+    if (!layerName || dist === 0) {
+      WazeToastr.Alerts.warning('Selection Required', 'Please select a layer and enter a shift distance.', false, false, 2000);
+      return;
+    }
+
+    // Find the layer
+    const layerInfo = loadedGeoJSONLayers.find(l => l.name === layerName);
+    if (!layerInfo) return;
+
+    const layer = layerInfo.layer;
+    const map = W.map;
+    const proj = map.getProjectionObject();
+
+    let dx = 0, dy = 0;
+    const diag = dist * 0.7071; // sqrt(2)/2 for diagonal
+
+    if (proj && proj.projCode === 'EPSG:4326') {
+      const centerLat = map.getCenter().lat;
+      const metersPerDegreeLat = 111320;
+      const metersPerDegreeLon = (40075000 * Math.cos((centerLat * Math.PI) / 180)) / 360;
+
+      switch (direction) {
+        case 'up': dy = dist / metersPerDegreeLat; break;
+        case 'down': dy = -dist / metersPerDegreeLat; break;
+        case 'left': dx = -dist / metersPerDegreeLon; break;
+        case 'right': dx = dist / metersPerDegreeLon; break;
+        case 'upleft': dx = -diag / metersPerDegreeLon; dy = diag / metersPerDegreeLat; break;
+        case 'upright': dx = diag / metersPerDegreeLon; dy = diag / metersPerDegreeLat; break;
+        case 'downleft': dx = -diag / metersPerDegreeLon; dy = -diag / metersPerDegreeLat; break;
+        case 'downright': dx = diag / metersPerDegreeLon; dy = -diag / metersPerDegreeLat; break;
+      }
+    } else {
+      switch (direction) {
+        case 'up': dy = dist; break;
+        case 'down': dy = -dist; break;
+        case 'left': dx = -dist; break;
+        case 'right': dx = dist; break;
+        case 'upleft': dx = -diag; dy = diag; break;
+        case 'upright': dx = diag; dy = diag; break;
+        case 'downleft': dx = -diag; dy = -diag; break;
+        case 'downright': dx = diag; dy = -diag; break;
+      }
+    }
+
+    // Initialize offset if not exists
+    if (!geoJsonLayerOffsets[layerName]) {
+      geoJsonLayerOffsets[layerName] = { x: 0, y: 0 };
+    }
+
+    // Update offset
+    geoJsonLayerOffsets[layerName].x += dx;
+    geoJsonLayerOffsets[layerName].y += dy;
+
+    // Apply offset to all features
+    layer.features.forEach(feature => {
+      if (feature.geometry && feature.geometry.move) {
+        feature.geometry.move(dx, dy);
+      }
+    });
+
+    // Redraw layer
+    layer.redraw();
+
+    WazeToastr.Alerts.info('Layer Shifted', `Layer shifted ${dist} meters ${direction}.`, false, false, 2000);
+  }
+
+  // Helper: reset GeoJSON layer shift
+  function resetGeoJsonShift() {
+    const selectElem = document.getElementById('geoJsonLayerSelect');
+    if (!selectElem) return;
+
+    const layerName = selectElem.value;
+    if (!layerName) {
+      WazeToastr.Alerts.warning('Selection Required', 'Please select a layer to reset.', false, false, 2000);
+      return;
+    }
+
+    // Find the layer
+    const layerInfo = loadedGeoJSONLayers.find(l => l.name === layerName);
+    if (!layerInfo) return;
+
+    const layer = layerInfo.layer;
+    const offset = geoJsonLayerOffsets[layerName];
+
+    if (offset && (offset.x !== 0 || offset.y !== 0)) {
+      // Move back to original position
+      layer.features.forEach(feature => {
+        if (feature.geometry && feature.geometry.move) {
+          feature.geometry.move(-offset.x, -offset.y);
+        }
+      });
+
+      // Reset offset
+      geoJsonLayerOffsets[layerName] = { x: 0, y: 0 };
+
+      // Redraw layer
+      layer.redraw();
+
+      WazeToastr.Alerts.success('Shift Reset', 'Layer position reset to original.', false, false, 2000);
+    } else {
+      WazeToastr.Alerts.info('No Shift', 'Layer has no offset to reset.', false, false, 2000);
+    }
+  }
 
   async function init() {
     console.log(`${scriptName} initializing.`);
@@ -1020,6 +1163,259 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     });
 
     tabPane.appendChild(section);
+
+    // --- GeoJSON URL Loading Section ---
+    var geoJsonSection = document.createElement('section');
+    geoJsonSection.style.fontSize = '13px';
+    geoJsonSection.id = 'GeoJSONURLSection';
+    geoJsonSection.style.marginBottom = '15px';
+    geoJsonSection.style.marginTop = '15px';
+    geoJsonSection.style.borderTop = '2px solid #ccc';
+    geoJsonSection.style.paddingTop = '10px';
+
+    var geoJsonTitle = document.createElement('h3');
+    geoJsonTitle.textContent = 'Load GeoJSON from URL';
+    geoJsonTitle.style.fontSize = '14px';
+    geoJsonTitle.style.fontWeight = 'bold';
+    geoJsonTitle.style.marginBottom = '10px';
+    geoJsonSection.appendChild(geoJsonTitle);
+
+    // Font styling controls
+    var fontStyleContainer = document.createElement('div');
+    fontStyleContainer.style.display = 'flex';
+    fontStyleContainer.style.gap = '10px';
+    fontStyleContainer.style.marginBottom = '10px';
+
+    // Font color picker
+    var fontColorContainer = document.createElement('div');
+    fontColorContainer.style.flex = '1';
+    var fontColorLabel = document.createElement('label');
+    fontColorLabel.textContent = 'Label Color: ';
+    fontColorLabel.style.display = 'block';
+    fontColorLabel.style.marginBottom = '3px';
+    fontColorLabel.style.fontSize = '12px';
+    var fontColorInput = document.createElement('input');
+    fontColorInput.type = 'color';
+    fontColorInput.id = 'geoJsonFontColor';
+    fontColorInput.value = '#ffffff';
+    fontColorInput.style.width = '70%';
+    fontColorInput.style.height = '30px';
+    fontColorInput.style.cursor = 'pointer';
+    fontColorContainer.appendChild(fontColorLabel);
+    fontColorContainer.appendChild(fontColorInput);
+
+    // Font size input
+    var fontSizeContainer = document.createElement('div');
+    fontSizeContainer.style.flex = '1';
+    var fontSizeLabel = document.createElement('label');
+    fontSizeLabel.textContent = 'Label Size (px): ';
+    fontSizeLabel.style.display = 'block';
+    fontSizeLabel.style.marginBottom = '3px';
+    fontSizeLabel.style.fontSize = '12px';
+    var fontSizeInput = document.createElement('input');
+    fontSizeInput.type = 'number';
+    fontSizeInput.id = 'geoJsonFontSize';
+    fontSizeInput.value = '12';
+    fontSizeInput.min = '8';
+    fontSizeInput.max = '24';
+    fontSizeInput.style.width = '70%';
+    fontSizeInput.style.padding = '5px';
+    fontSizeContainer.appendChild(fontSizeLabel);
+    fontSizeContainer.appendChild(fontSizeInput);
+
+    fontStyleContainer.appendChild(fontColorContainer);
+    fontStyleContainer.appendChild(fontSizeContainer);
+    geoJsonSection.appendChild(fontStyleContainer);
+
+    // Ward selector
+    var wardLabel = document.createElement('label');
+    wardLabel.textContent = 'Select Ward Number: ';
+    wardLabel.style.display = 'block';
+    wardLabel.style.marginBottom = '5px';
+    geoJsonSection.appendChild(wardLabel);
+
+    var wardSelect = document.createElement('select');
+    wardSelect.id = 'geoJsonWardSelect';
+    wardSelect.style.width = '100%';
+    wardSelect.style.marginBottom = '10px';
+    wardSelect.style.padding = '5px';
+
+    // Add ward options 1-29
+    for (let i = 1; i <= 29; i++) {
+      let option = document.createElement('option');
+      option.value = i;
+      option.textContent = `Ward ${i}`;
+      wardSelect.appendChild(option);
+    }
+    geoJsonSection.appendChild(wardSelect);
+
+    // Load button
+    var loadGeoJsonBtn = document.createElement('button');
+    loadGeoJsonBtn.textContent = 'Load Buildings from URL';
+    loadGeoJsonBtn.style.width = '100%';
+    loadGeoJsonBtn.style.padding = '8px';
+    loadGeoJsonBtn.style.marginBottom = '5px';
+    loadGeoJsonBtn.style.cursor = 'pointer';
+    loadGeoJsonBtn.title = 'Load building data from geonep.com.np';
+    loadGeoJsonBtn.addEventListener('click', loadGeoJSONFromURL);
+    geoJsonSection.appendChild(loadGeoJsonBtn);
+
+    // Clear button
+    var clearGeoJsonBtn = document.createElement('button');
+    clearGeoJsonBtn.textContent = 'Clear Loaded Buildings';
+    clearGeoJsonBtn.style.width = '100%';
+    clearGeoJsonBtn.style.padding = '8px';
+    clearGeoJsonBtn.style.cursor = 'pointer';
+    clearGeoJsonBtn.title = 'Remove all loaded building layers';
+    clearGeoJsonBtn.addEventListener('click', clearLoadedGeoJSON);
+    geoJsonSection.appendChild(clearGeoJsonBtn);
+
+    // Status display
+    var geoJsonStatus = document.createElement('div');
+    geoJsonStatus.id = 'geoJsonStatus';
+    geoJsonStatus.style.marginTop = '10px';
+    geoJsonStatus.style.fontSize = '12px';
+    geoJsonStatus.style.fontStyle = 'italic';
+    geoJsonSection.appendChild(geoJsonStatus);
+
+    // --- GeoJSON Layer Shift Controls ---
+    var geoJsonShiftContainer = document.createElement('div');
+    geoJsonShiftContainer.style.marginTop = '15px';
+    geoJsonShiftContainer.style.paddingTop = '10px';
+    geoJsonShiftContainer.style.borderTop = '1px solid #ccc';
+
+    var geoJsonShiftTitle = document.createElement('h4');
+    geoJsonShiftTitle.textContent = 'GeoJSON Layer Shift Controls';
+    geoJsonShiftTitle.style.fontSize = '13px';
+    geoJsonShiftTitle.style.marginBottom = '10px';
+    geoJsonShiftContainer.appendChild(geoJsonShiftTitle);
+
+    // Layer selector for shift
+    var geoJsonLayerSelectLabel = document.createElement('label');
+    geoJsonLayerSelectLabel.textContent = 'Select Layer: ';
+    geoJsonLayerSelectLabel.style.display = 'block';
+    geoJsonLayerSelectLabel.style.marginBottom = '5px';
+    geoJsonShiftContainer.appendChild(geoJsonLayerSelectLabel);
+
+    var geoJsonLayerSelect = document.createElement('select');
+    geoJsonLayerSelect.id = 'geoJsonLayerSelect';
+    geoJsonLayerSelect.style.width = '100%';
+    geoJsonLayerSelect.style.marginBottom = '10px';
+    geoJsonLayerSelect.style.padding = '5px';
+    var defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = '-- Select a loaded layer --';
+    geoJsonLayerSelect.appendChild(defaultOption);
+    geoJsonShiftContainer.appendChild(geoJsonLayerSelect);
+
+    // Shift distance input
+    var geoJsonShiftDistLabel = document.createElement('label');
+    geoJsonShiftDistLabel.textContent = 'Shift Distance (meters): ';
+    geoJsonShiftDistLabel.style.display = 'block';
+    geoJsonShiftDistLabel.style.marginBottom = '5px';
+    geoJsonShiftContainer.appendChild(geoJsonShiftDistLabel);
+
+    var geoJsonShiftDistInput = document.createElement('input');
+    geoJsonShiftDistInput.type = 'number';
+    geoJsonShiftDistInput.id = 'geoJsonShiftDistance';
+    geoJsonShiftDistInput.value = '10';
+    geoJsonShiftDistInput.min = '0';
+    geoJsonShiftDistInput.step = '1';
+    geoJsonShiftDistInput.style.width = '100%';
+    geoJsonShiftDistInput.style.marginBottom = '10px';
+    geoJsonShiftDistInput.style.padding = '5px';
+    geoJsonShiftContainer.appendChild(geoJsonShiftDistInput);
+
+    // Direction buttons for GeoJSON
+    var geoJsonBtnUp = document.createElement('button');
+    geoJsonBtnUp.textContent = '↑';
+    geoJsonBtnUp.title = 'Shift Up';
+    var geoJsonBtnDown = document.createElement('button');
+    geoJsonBtnDown.textContent = '↓';
+    geoJsonBtnDown.title = 'Shift Down';
+    var geoJsonBtnLeft = document.createElement('button');
+    geoJsonBtnLeft.textContent = '←';
+    geoJsonBtnLeft.title = 'Shift Left';
+    var geoJsonBtnRight = document.createElement('button');
+    geoJsonBtnRight.textContent = '→';
+    geoJsonBtnRight.title = 'Shift Right';
+
+    // Diagonal buttons for GeoJSON
+    var geoJsonBtnUpLeft = document.createElement('button');
+    geoJsonBtnUpLeft.textContent = '↖';
+    geoJsonBtnUpLeft.title = 'Shift Up-Left';
+    var geoJsonBtnUpRight = document.createElement('button');
+    geoJsonBtnUpRight.textContent = '↗';
+    geoJsonBtnUpRight.title = 'Shift Up-Right';
+    var geoJsonBtnDownLeft = document.createElement('button');
+    geoJsonBtnDownLeft.textContent = '↙';
+    geoJsonBtnDownLeft.title = 'Shift Down-Left';
+    var geoJsonBtnDownRight = document.createElement('button');
+    geoJsonBtnDownRight.textContent = '↘';
+    geoJsonBtnDownRight.title = 'Shift Down-Right';
+
+    // Reset button for GeoJSON
+    var geoJsonBtnReset = document.createElement('button');
+    geoJsonBtnReset.textContent = 'Reset';
+    geoJsonBtnReset.title = 'Reset Shift';
+
+    // Arrange buttons in a grid
+    var geoJsonBtnGrid = document.createElement('div');
+    geoJsonBtnGrid.style.display = 'grid';
+    geoJsonBtnGrid.style.gridTemplateColumns = 'repeat(3, 1fr)';
+    geoJsonBtnGrid.style.gap = '2px';
+    geoJsonBtnGrid.style.marginBottom = '10px';
+    geoJsonBtnGrid.appendChild(geoJsonBtnUpLeft);
+    geoJsonBtnGrid.appendChild(geoJsonBtnUp);
+    geoJsonBtnGrid.appendChild(geoJsonBtnUpRight);
+    geoJsonBtnGrid.appendChild(geoJsonBtnLeft);
+    var geoJsonEmptyCell = document.createElement('div');
+    geoJsonBtnGrid.appendChild(geoJsonEmptyCell); // center cell empty
+    geoJsonBtnGrid.appendChild(geoJsonBtnRight);
+    geoJsonBtnGrid.appendChild(geoJsonBtnDownLeft);
+    geoJsonBtnGrid.appendChild(geoJsonBtnDown);
+    geoJsonBtnGrid.appendChild(geoJsonBtnDownRight);
+    geoJsonShiftContainer.appendChild(geoJsonBtnGrid);
+
+    // Reset button row
+    var geoJsonResetRow = document.createElement('div');
+    geoJsonResetRow.style.marginTop = '5px';
+    geoJsonResetRow.appendChild(geoJsonBtnReset);
+    geoJsonShiftContainer.appendChild(geoJsonResetRow);
+
+    // Add event listeners for GeoJSON shift buttons
+    geoJsonBtnUp.addEventListener('click', function () {
+      shiftGeoJsonLayer('up');
+    });
+    geoJsonBtnDown.addEventListener('click', function () {
+      shiftGeoJsonLayer('down');
+    });
+    geoJsonBtnLeft.addEventListener('click', function () {
+      shiftGeoJsonLayer('left');
+    });
+    geoJsonBtnRight.addEventListener('click', function () {
+      shiftGeoJsonLayer('right');
+    });
+    geoJsonBtnUpLeft.addEventListener('click', function () {
+      shiftGeoJsonLayer('upleft');
+    });
+    geoJsonBtnUpRight.addEventListener('click', function () {
+      shiftGeoJsonLayer('upright');
+    });
+    geoJsonBtnDownLeft.addEventListener('click', function () {
+      shiftGeoJsonLayer('downleft');
+    });
+    geoJsonBtnDownRight.addEventListener('click', function () {
+      shiftGeoJsonLayer('downright');
+    });
+    geoJsonBtnReset.addEventListener('click', function () {
+      resetGeoJsonShift();
+    });
+
+    geoJsonSection.appendChild(geoJsonShiftContainer);
+
+    tabPane.appendChild(geoJsonSection);
+
     await W.userscripts.waitForElementConnected(tabPane);
     fillWMSLayersSelectList();
     opacityRange.addEventListener('input', function () {
@@ -1311,6 +1707,331 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
     return OL.Layer.Grid.prototype.getFullRequestString.apply(this, arguments);
   }
 
+  // Function to load GeoJSON from URL
+  function loadGeoJSONFromURL() {
+    const wardNo = document.getElementById('geoJsonWardSelect').value;
+    const fontColor = document.getElementById('geoJsonFontColor').value;
+    const fontSize = document.getElementById('geoJsonFontSize').value;
+    const url = `https://geonep.com.np/LMC/ajax/x_building.php?ward_no=${wardNo}`;
+    const layerName = `LMC_Ward_${wardNo}_Buildings`;
+    
+    // Check if layer already exists
+    const existingLayer = W.map.getLayersByName(layerName);
+    if (existingLayer && existingLayer.length > 0) {
+      WazeToastr.Alerts.warning(
+        scriptName,
+        `Ward ${wardNo} buildings already loaded`,
+        false,
+        false,
+        3000
+      );
+      return;
+    }
+    
+    updateGeoJsonStatus('Loading buildings...');
+    console.log(`${scriptName}: Fetching GeoJSON from ${url}`);
+    
+    GM_xmlhttpRequest({
+      method: 'GET',
+      url: url,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000,
+      onload: function(response) {
+        if (response.status >= 200 && response.status < 300) {
+          try {
+            const geojsonData = JSON.parse(response.responseText);
+            
+            // Validate GeoJSON structure
+            if (!geojsonData || !geojsonData.type || !geojsonData.features) {
+              throw new Error('Invalid GeoJSON format');
+            }
+            
+            if (geojsonData.features.length === 0) {
+              throw new Error('No features found in GeoJSON');
+            }
+            
+            console.log(`${scriptName}: Loaded ${geojsonData.features.length} features`);
+            
+            // Create vector layer
+            createGeoJSONVectorLayer(geojsonData, layerName, wardNo, fontColor, fontSize);
+            
+            updateGeoJsonStatus(`Loaded ${geojsonData.features.length} buildings from Ward ${wardNo}`);
+            WazeToastr.Alerts.success(
+              scriptName,
+              `Successfully loaded ${geojsonData.features.length} buildings from Ward ${wardNo}`,
+              false,
+              false,
+              3000
+            );
+            
+          } catch (error) {
+            console.error(`${scriptName}: Error parsing GeoJSON:`, error);
+            updateGeoJsonStatus(`Error: ${error.message}`);
+            WazeToastr.Alerts.error(
+              scriptName,
+              `Failed to parse GeoJSON: ${error.message}`,
+              false,
+              false,
+              5000
+            );
+          }
+        } else {
+          const errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+          console.error(`${scriptName}: ${errorMsg}`);
+          updateGeoJsonStatus(`Error: ${errorMsg}`);
+          WazeToastr.Alerts.error(
+            scriptName,
+            `Failed to load data: ${errorMsg}`,
+            false,
+            false,
+            5000
+          );
+        }
+      },
+      onerror: function(error) {
+        console.error(`${scriptName}: Network error:`, error);
+        updateGeoJsonStatus('Network error occurred');
+        WazeToastr.Alerts.error(
+          scriptName,
+          'Network error: Unable to connect to geonep.com.np',
+          false,
+          false,
+          5000
+        );
+      },
+      ontimeout: function() {
+        console.error(`${scriptName}: Request timeout`);
+        updateGeoJsonStatus('Request timeout');
+        WazeToastr.Alerts.error(
+          scriptName,
+          'Request timeout: Server took too long to respond',
+          false,
+          false,
+          5000
+        );
+      }
+    });
+  }
+
+  // Helper function to remove Z coordinates from GeoJSON
+  function removeZCoordinates(coords) {
+    if (!coords) return coords;
+    
+    // Check if this is a coordinate pair [lon, lat] or [lon, lat, elevation]
+    if (typeof coords[0] === 'number') {
+      // It's a coordinate pair/triple - return only [lon, lat]
+      return coords.slice(0, 2);
+    }
+    
+    // It's an array of coordinates - recurse
+    return coords.map(removeZCoordinates);
+  }
+
+  // Function to create vector layer from GeoJSON
+  function createGeoJSONVectorLayer(geojsonData, layerName, wardNo, fontColor, fontSize) {
+    try {
+      // Default values if not provided
+      fontColor = fontColor || '#ffffff';
+      fontSize = fontSize || '12';
+      
+      console.log(`${scriptName}: Creating vector layer for Ward ${wardNo}`);
+      console.log(`${scriptName}: Font settings - Color: ${fontColor}, Size: ${fontSize}px`);
+      console.log(`${scriptName}: GeoJSON data:`, geojsonData);
+      
+      // Ensure we have valid GeoJSON
+      if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) {
+        throw new Error('No features in GeoJSON data');
+      }
+      
+      // Parse GeoJSON - convert string to object if needed
+      const geojson = typeof geojsonData === 'string' ? JSON.parse(geojsonData) : geojsonData;
+      
+      // Remove Z coordinates (elevation) from all features as OpenLayers 2 doesn't handle 3D coordinates well
+      geojson.features.forEach(feature => {
+        if (feature.geometry && feature.geometry.coordinates) {
+          feature.geometry.coordinates = removeZCoordinates(feature.geometry.coordinates);
+        }
+      });
+      
+      console.log(`${scriptName}: Processing ${geojson.features.length} features from GeoJSON (Z-coordinates removed)`);
+      
+      // Create OpenLayers GeoJSON format reader
+      const format = new OL.Format.GeoJSON({
+        internalProjection: W.map.getProjectionObject(),
+        externalProjection: new OL.Projection('EPSG:4326')
+      });
+      
+      // Read features from GeoJSON as a complete FeatureCollection
+      let features;
+      try {
+        // Pass the entire GeoJSON object as a string (OpenLayers 2 way)
+        const geojsonString = typeof geojson === 'string' ? geojson : JSON.stringify(geojson);
+        features = format.read(geojsonString);
+        console.log(`${scriptName}: Successfully parsed features using format.read()`);
+      } catch (parseError) {
+        console.error(`${scriptName}: Primary GeoJSON parse error:`, parseError);
+        console.log(`${scriptName}: Attempting alternative parsing method...`);
+        
+        // Alternative: parse each feature individually
+        features = [];
+        geojson.features.forEach(function(feature, index) {
+          try {
+            // Create a temporary FeatureCollection for each feature
+            const singleFeatureCollection = {
+              type: 'FeatureCollection',
+              features: [feature]
+            };
+            const featureString = JSON.stringify(singleFeatureCollection);
+            const parsedFeatures = format.read(featureString);
+            
+            if (parsedFeatures && parsedFeatures.length > 0) {
+              features = features.concat(parsedFeatures);
+            }
+          } catch (e) {
+            console.warn(`${scriptName}: Skipping feature ${index}:`, e);
+          }
+        });
+      }
+      
+      console.log(`${scriptName}: Total features parsed: ${features ? features.length : 0}`);
+      
+      if (!features || features.length === 0) {
+        throw new Error('No valid features could be parsed from GeoJSON');
+      }
+      
+      // Create vector layer with parsed features
+      const vectorLayer = new OL.Layer.Vector(layerName, {
+        displayInLayerSwitcher: false,
+        uniqueName: layerName,
+        projection: W.map.getProjectionObject(),
+        styleMap: new OL.StyleMap({
+          default: new OL.Style({
+            strokeColor: '#FF5722',
+            strokeWidth: 2,
+            strokeOpacity: 0.8,
+            fillColor: '#FF5722',
+            fillOpacity: 0.01,
+            pointRadius: 4,
+            label: '${metric_num}\n${rd_naeng}\n${tole_ne_en}',
+            labelAlign: 'cm',
+            labelOutlineColor: '#000000',
+            labelOutlineWidth: 3,
+            fontSize: fontSize + 'px',
+            fontWeight: 'bold',
+            fontFamily: 'inherit',
+            fontColor: fontColor,
+          }),
+          select: new OL.Style({
+            strokeColor: '#00BCD4',
+            strokeWidth: 3,
+            fillColor: '#00BCD4',
+            fillOpacity: 0.01
+          })
+        })
+      });
+      
+      // Add features to layer
+      vectorLayer.addFeatures(features);
+      console.log(`${scriptName}: Added ${features.length} features to vector layer`);
+      
+      // Add layer to map
+      W.map.addLayer(vectorLayer);
+      vectorLayer.setVisibility(true);
+      vectorLayer.setZIndex(ZIndexes.popup + 10);
+      
+      // Store reference for cleanup
+      loadedGeoJSONLayers.push({
+        layer: vectorLayer,
+        name: layerName,
+        wardNo: wardNo
+      });
+      
+      // Update layer selector dropdown
+      updateGeoJsonLayerSelector();
+      
+    } catch (error) {
+      console.error(`${scriptName}: Error creating GeoJSON vector layer:`, error);
+      WazeToastr.Alerts.error(
+        scriptName,
+        `Failed to create vector layer: ${error.message}`,
+        false,
+        false,
+        5000
+      );
+      throw error;
+    }
+  }
+
+  // Function to clear all loaded GeoJSON layers
+  function clearLoadedGeoJSON() {
+    if (loadedGeoJSONLayers.length === 0) {
+      WazeToastr.Alerts.info(
+        scriptName,
+        'No building layers to clear',
+        false,
+        false,
+        2000
+      );
+      return;
+    }
+    
+    let removedCount = 0;
+    loadedGeoJSONLayers.forEach(item => {
+      if (item.layer) {
+        W.map.removeLayer(item.layer);
+        item.layer.destroy();
+        removedCount++;
+      }
+    });
+    
+    loadedGeoJSONLayers = [];
+    updateGeoJsonStatus('All building layers cleared');
+    
+    WazeToastr.Alerts.success(
+      scriptName,
+      `Removed ${removedCount} building layer(s)`,
+      false,
+      false,
+      2000
+    );
+  }
+
+  // Helper function to update status display
+  function updateGeoJsonStatus(message) {
+    const statusDiv = document.getElementById('geoJsonStatus');
+    if (statusDiv) {
+      statusDiv.textContent = message;
+      statusDiv.style.color = message.includes('Error') ? '#f44336' : '#4CAF50';
+    }
+  }
+
+  // Helper: update GeoJSON layer selector dropdown
+  function updateGeoJsonLayerSelector() {
+    const select = document.getElementById('geoJsonLayerSelect');
+    if (!select) return;
+
+    // Clear existing options except first (default)
+    while (select.options.length > 1) {
+      select.remove(1);
+    }
+
+    // Add options for each loaded layer
+    loadedGeoJSONLayers.forEach(layerInfo => {
+      const option = document.createElement('option');
+      option.value = layerInfo.name;
+      option.textContent = layerInfo.name;
+      select.appendChild(option);
+    });
+
+    // Reset to default if no layers
+    if (loadedGeoJSONLayers.length === 0) {
+      select.selectedIndex = 0;
+    }
+  }
+
   // After all WMSLayerTogglers are created:
 
   // --- Layer toggler state persistence ---
@@ -1374,10 +2095,11 @@ console.log(`${scriptName} initialized.`);
   document.addEventListener('wme-map-data-loaded', () => setTimeout(init, 2000), { once: true });
   /*
 changeLog
-2025.12.27.00
-- Temporary Fix for alert not displaying issue.
-2025.12.05.01
-- Added delayed loading of WMS layers to ensure map data is fully loaded.
+2026.02.06.01
+- Added feature: Load GeoJSON from URL (LMC Ward Buildings from geonep.com.np)
+- New UI section to select ward number (1-29) and load building data
+- Buildings display with house numbers as labels
+- Clear button to remove all loaded GeoJSON layers
 2025.11.29.01
 - Added layers: Health Facilities from National Geoportal, Police Units from National Geoportal.
 2025.08.30.01
