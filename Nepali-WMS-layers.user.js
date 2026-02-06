@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.02.06.01
+// @version       2026.02.06.02
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
@@ -1193,7 +1193,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     fontColorLabel.textContent = 'Label Color: ';
     fontColorLabel.style.display = 'block';
     fontColorLabel.style.marginBottom = '3px';
-    fontColorLabel.style.fontSize = '12px';
+    fontColorLabel.style.fontSize = '13px';
     var fontColorInput = document.createElement('input');
     fontColorInput.type = 'color';
     fontColorInput.id = 'geoJsonFontColor';
@@ -1211,11 +1211,11 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     fontSizeLabel.textContent = 'Label Size (px): ';
     fontSizeLabel.style.display = 'block';
     fontSizeLabel.style.marginBottom = '3px';
-    fontSizeLabel.style.fontSize = '12px';
+    fontSizeLabel.style.fontSize = '13px';
     var fontSizeInput = document.createElement('input');
     fontSizeInput.type = 'number';
     fontSizeInput.id = 'geoJsonFontSize';
-    fontSizeInput.value = '12';
+    fontSizeInput.value = '13';
     fontSizeInput.min = '8';
     fontSizeInput.max = '24';
     fontSizeInput.style.width = '70%';
@@ -1835,7 +1835,7 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
     try {
       // Default values if not provided
       fontColor = fontColor || '#ffffff';
-      fontSize = fontSize || '12';
+      fontSize = fontSize || '13';
       
       console.log(`${scriptName}: Creating vector layer for Ward ${wardNo}`);
       console.log(`${scriptName}: Font settings - Color: ${fontColor}, Size: ${fontSize}px`);
@@ -1915,7 +1915,7 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
             fillColor: '#FF5722',
             fillOpacity: 0.01,
             pointRadius: 4,
-            label: '${metric_num}\n${rd_naeng}\n${tole_ne_en}',
+            label: '${custom_label}',
             labelAlign: 'cm',
             labelOutlineColor: '#000000',
             labelOutlineWidth: 3,
@@ -1931,6 +1931,25 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
             fillOpacity: 0.01
           })
         })
+      });
+      
+      // Process features to handle null values in labels
+      features.forEach(feature => {
+        if (feature.attributes) {
+          // Create a custom label by filtering out null/undefined values
+          const labelParts = [];
+          if (feature.attributes.metric_num !== null && feature.attributes.metric_num !== undefined) {
+            labelParts.push(feature.attributes.metric_num);
+          }
+          if (feature.attributes.rd_naeng !== null && feature.attributes.rd_naeng !== undefined) {
+            labelParts.push(feature.attributes.rd_naeng);
+          }
+          if (feature.attributes.tole_ne_en !== null && feature.attributes.tole_ne_en !== undefined) {
+            labelParts.push(feature.attributes.tole_ne_en);
+          }
+          // Set the custom label attribute
+          feature.attributes.custom_label = labelParts.join('\n');
+        }
       });
       
       // Add features to layer
