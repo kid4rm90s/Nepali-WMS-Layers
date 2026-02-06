@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.02.06.05
+// @version       2026.02.06.06
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
@@ -13,6 +13,7 @@
 // @grant         GM_xmlhttpRequest
 // @require       https://greasyfork.org/scripts/560385/code/WazeToastr.js
 // @require      https://update.greasyfork.org/scripts/516445/1480246/Make%20GM%20xhr%20more%20parallel%20again.js
+// @require       https://kid4rm90s.github.io/preeti2unicode/preeti.js
 // @downloadURL   https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
 // @updateURL     https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js
 // @connect       geoserver.softwel.com.np
@@ -20,6 +21,7 @@
 // @connect       localhost:8080
 // @connect       greasyfork.org
 // @connect       geonep.com.np
+// @connect       kid4rm90s.github.io
 // ==/UserScript==
 
 /*  Scripts modified from Czech WMS layers (https://greasyfork.org/cs/scripts/35069-czech-wms-layers; https://greasyfork.org/en/scripts/34720-private-czech-wms-layers, https://greasyfork.org/en/scripts/28160) 
@@ -2069,7 +2071,7 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
           labelOutlineWidth: 3,
           fontSize: fontSize + 'px',
           fontWeight: 'bold',
-          fontFamily: 'inherit',
+          fontFamily: 'Preeti, inherit',
           fontColor: fontColor,
         });
         selectStyle = new OL.Style({
@@ -2106,6 +2108,11 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
               }
             if (feature.attributes.rd_naeng !== null && feature.attributes.rd_naeng !== undefined) {
               labelParts.push(feature.attributes.rd_naeng);
+            }
+            if (feature.attributes.rd_nanep !== null && feature.attributes.rd_nanep !== undefined) {
+              // Convert Preeti font to Unicode
+              const unicodeText = typeof preeti === 'function' ? preeti(feature.attributes.rd_nanep) : feature.attributes.rd_nanep;
+              labelParts.push(unicodeText);
             }
             if (feature.attributes.tole_ne_en !== null && feature.attributes.tole_ne_en !== undefined) {
               labelParts.push(feature.attributes.tole_ne_en);
@@ -2285,6 +2292,9 @@ console.log(`${scriptName} initialized.`);
   document.addEventListener('wme-map-data-loaded', () => setTimeout(init, 2000), { once: true });
   /*
 changeLog
+2026.02.06.06
+- Added Preeti font to Unicode conversion for rd_nanep field
+- Building labels now display Nepali text in proper Unicode format
 2026.02.06.01
 - Added feature: Load GeoJSON from URL (LMC Ward Buildings from geonep.com.np)
 - New UI section to select ward number (1-29) and load building data
