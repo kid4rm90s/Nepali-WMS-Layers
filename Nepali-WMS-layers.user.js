@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.02.06.03
+// @version       2026.02.06.04
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
@@ -34,7 +34,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 (function main() {
   ('use strict');
   const updateMessage =
-'<strong>New Feature:</strong><br> - Load GeoJSON from URL (LMC Ward Buildings from geonep.com.np)';
+'<strong>New Feature:</strong><br> - Load LMC Ward Buildings and Boundaries from geonep.com.np';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -1712,15 +1712,19 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
     const wardNo = document.getElementById('geoJsonWardSelect').value;
     const fontColor = document.getElementById('geoJsonFontColor').value;
     const fontSize = document.getElementById('geoJsonFontSize').value;
-    const url = `https://geonep.com.np/LMC/ajax/x_building.php?ward_no=${wardNo}`;
-    const layerName = `LMC_Ward_${wardNo}_Buildings`;
+    const buildingUrl = `https://geonep.com.np/LMC/ajax/x_building.php?ward_no=${wardNo}`;
+    const boundaryUrl = `https://geonep.com.np/LMC/ajax/x_ward_bnd.php?ward_no=${wardNo}`;
+    const buildingLayerName = `LMC_Ward_${wardNo}_Buildings`;
+    const boundaryLayerName = `LMC_Ward_${wardNo}_Boundary`;
     
-    // Check if layer already exists
-    const existingLayer = W.map.getLayersByName(layerName);
-    if (existingLayer && existingLayer.length > 0) {
+    // Check if layers already exist
+    const existingBuildingLayer = W.map.getLayersByName(buildingLayerName);
+    const existingBoundaryLayer = W.map.getLayersByName(boundaryLayerName);
+    if ((existingBuildingLayer && existingBuildingLayer.length > 0) || 
+        (existingBoundaryLayer && existingBoundaryLayer.length > 0)) {
       WazeToastr.Alerts.warning(
         scriptName,
-        `Ward ${wardNo} buildings already loaded`,
+        `Ward ${wardNo} layers already loaded`,
         false,
         false,
         3000
@@ -1728,12 +1732,14 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
       return;
     }
     
-    updateGeoJsonStatus('Loading buildings...');
-    console.log(`${scriptName}: Fetching GeoJSON from ${url}`);
+    updateGeoJsonStatus('Loading buildings and boundary...');
+    console.log(`${scriptName}: Fetching buildings from ${buildingUrl}`);
+    console.log(`${scriptName}: Fetching boundary from ${boundaryUrl}`);
     
+    // Load buildings first
     GM_xmlhttpRequest({
       method: 'GET',
-      url: url,
+      url: buildingUrl,
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
@@ -1753,26 +1759,20 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
               throw new Error('No features found in GeoJSON');
             }
             
-            console.log(`${scriptName}: Loaded ${geojsonData.features.length} features`);
+            console.log(`${scriptName}: Loaded ${geojsonData.features.length} building features`);
             
-            // Create vector layer
-            createGeoJSONVectorLayer(geojsonData, layerName, wardNo, fontColor, fontSize);
+            // Create vector layer for buildings
+            createGeoJSONVectorLayer(geojsonData, buildingLayerName, wardNo, fontColor, fontSize, 'buildings');
             
-            updateGeoJsonStatus(`Loaded ${geojsonData.features.length} buildings from Ward ${wardNo}`);
-            WazeToastr.Alerts.success(
-              scriptName,
-              `Successfully loaded ${geojsonData.features.length} buildings from Ward ${wardNo}`,
-              false,
-              false,
-              3000
-            );
+            // Now load the boundary
+            loadWardBoundary(wardNo, boundaryUrl, boundaryLayerName, geojsonData.features.length);
             
           } catch (error) {
-            console.error(`${scriptName}: Error parsing GeoJSON:`, error);
+            console.error(`${scriptName}: Error parsing buildings GeoJSON:`, error);
             updateGeoJsonStatus(`Error: ${error.message}`);
             WazeToastr.Alerts.error(
               scriptName,
-              `Failed to parse GeoJSON: ${error.message}`,
+              `Failed to parse buildings GeoJSON: ${error.message}`,
               false,
               false,
               5000
@@ -1784,7 +1784,7 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
           updateGeoJsonStatus(`Error: ${errorMsg}`);
           WazeToastr.Alerts.error(
             scriptName,
-            `Failed to load data: ${errorMsg}`,
+            `Failed to load buildings data: ${errorMsg}`,
             false,
             false,
             5000
@@ -1816,6 +1816,89 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
     });
   }
 
+  // Function to load ward boundary
+  function loadWardBoundary(wardNo, boundaryUrl, boundaryLayerName, buildingCount) {
+    GM_xmlhttpRequest({
+      method: 'GET',
+      url: boundaryUrl,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000,
+      onload: function(response) {
+        if (response.status >= 200 && response.status < 300) {
+          try {
+            const boundaryData = JSON.parse(response.responseText);
+            
+            // Validate GeoJSON structure
+            if (!boundaryData || !boundaryData.type || !boundaryData.features) {
+              throw new Error('Invalid boundary GeoJSON format');
+            }
+            
+            console.log(`${scriptName}: Loaded ${boundaryData.features.length} boundary features`);
+            
+            // Create vector layer for boundary
+            createGeoJSONVectorLayer(boundaryData, boundaryLayerName, wardNo, null, null, 'boundary');
+            
+            updateGeoJsonStatus(`Loaded ${buildingCount} buildings and boundary for Ward ${wardNo}`);
+            WazeToastr.Alerts.success(
+              scriptName,
+              `Successfully loaded ${buildingCount} buildings and boundary for Ward ${wardNo}`,
+              false,
+              false,
+              3000
+            );
+            
+          } catch (error) {
+            console.error(`${scriptName}: Error parsing boundary GeoJSON:`, error);
+            updateGeoJsonStatus(`Loaded buildings but boundary failed: ${error.message}`);
+            WazeToastr.Alerts.warning(
+              scriptName,
+              `Loaded buildings but boundary failed: ${error.message}`,
+              false,
+              false,
+              5000
+            );
+          }
+        } else {
+          const errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+          console.error(`${scriptName}: Boundary ${errorMsg}`);
+          updateGeoJsonStatus(`Loaded buildings but boundary failed`);
+          WazeToastr.Alerts.warning(
+            scriptName,
+            `Loaded buildings but boundary failed: ${errorMsg}`,
+            false,
+            false,
+            5000
+          );
+        }
+      },
+      onerror: function(error) {
+        console.error(`${scriptName}: Boundary network error:`, error);
+        updateGeoJsonStatus('Buildings loaded, boundary network error');
+        WazeToastr.Alerts.warning(
+          scriptName,
+          'Buildings loaded, but boundary failed to load',
+          false,
+          false,
+          5000
+        );
+      },
+      ontimeout: function() {
+        console.error(`${scriptName}: Boundary request timeout`);
+        updateGeoJsonStatus('Buildings loaded, boundary timeout');
+        WazeToastr.Alerts.warning(
+          scriptName,
+          'Buildings loaded, but boundary request timeout',
+          false,
+          false,
+          5000
+        );
+      }
+    });
+  }
+
   // Helper function to remove Z coordinates from GeoJSON
   function removeZCoordinates(coords) {
     if (!coords) return coords;
@@ -1831,14 +1914,19 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
   }
 
   // Function to create vector layer from GeoJSON
-  function createGeoJSONVectorLayer(geojsonData, layerName, wardNo, fontColor, fontSize) {
+  function createGeoJSONVectorLayer(geojsonData, layerName, wardNo, fontColor, fontSize, layerType) {
     try {
-      // Default values if not provided
+      // Default values for building layers
       fontColor = fontColor || '#ffffff';
       fontSize = fontSize || '13';
+      layerType = layerType || 'buildings';
       
-      console.log(`${scriptName}: Creating vector layer for Ward ${wardNo}`);
-      console.log(`${scriptName}: Font settings - Color: ${fontColor}, Size: ${fontSize}px`);
+      console.log(`${scriptName}: Creating ${layerType} vector layer for Ward ${wardNo}`);
+      
+      if (layerType === 'buildings') {
+        console.log(`${scriptName}: Font settings - Color: ${fontColor}, Size: ${fontSize}px`);
+      }
+      
       console.log(`${scriptName}: GeoJSON data:`, geojsonData);
       
       // Ensure we have valid GeoJSON
@@ -1902,59 +1990,87 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
         throw new Error('No valid features could be parsed from GeoJSON');
       }
       
+      // Define styles based on layer type
+      let defaultStyle, selectStyle;
+      
+      if (layerType === 'boundary') {
+        // Boundary layer style - prominent boundary lines
+        defaultStyle = new OL.Style({
+          strokeColor: '#FF0000',
+          strokeWidth: 3,
+          strokeOpacity: 0.9,
+          fillColor: '#FF0000',
+          fillOpacity: 0.05,
+          pointRadius: 4,
+          label: '',
+        });
+        selectStyle = new OL.Style({
+          strokeColor: '#00FF00',
+          strokeWidth: 4,
+          fillColor: '#00FF00',
+          fillOpacity: 0.05
+        });
+      } else {
+        // Building layer style - with labels
+        defaultStyle = new OL.Style({
+          strokeColor: '#FF5722',
+          strokeWidth: 2,
+          strokeOpacity: 0.8,
+          fillColor: '#FF5722',
+          fillOpacity: 0.01,
+          pointRadius: 4,
+          label: '${custom_label}',
+          labelAlign: 'cm',
+          labelOutlineColor: '#000000',
+          labelOutlineWidth: 3,
+          fontSize: fontSize + 'px',
+          fontWeight: 'bold',
+          fontFamily: 'inherit',
+          fontColor: fontColor,
+        });
+        selectStyle = new OL.Style({
+          strokeColor: '#00BCD4',
+          strokeWidth: 3,
+          fillColor: '#00BCD4',
+          fillOpacity: 0.01
+        });
+      }
+      
       // Create vector layer with parsed features
       const vectorLayer = new OL.Layer.Vector(layerName, {
         displayInLayerSwitcher: false,
         uniqueName: layerName,
         projection: W.map.getProjectionObject(),
         styleMap: new OL.StyleMap({
-          default: new OL.Style({
-            strokeColor: '#FF5722',
-            strokeWidth: 2,
-            strokeOpacity: 0.8,
-            fillColor: '#FF5722',
-            fillOpacity: 0.01,
-            pointRadius: 4,
-            label: '${custom_label}',
-            labelAlign: 'cm',
-            labelOutlineColor: '#000000',
-            labelOutlineWidth: 3,
-            fontSize: fontSize + 'px',
-            fontWeight: 'bold',
-            fontFamily: 'inherit',
-            fontColor: fontColor,
-          }),
-          select: new OL.Style({
-            strokeColor: '#00BCD4',
-            strokeWidth: 3,
-            fillColor: '#00BCD4',
-            fillOpacity: 0.01
-          })
+          default: defaultStyle,
+          select: selectStyle
         })
       });
       
-      // Process features to handle null values in labels
-      features.forEach(feature => {
-        if (feature.attributes) {
-          // Create a custom label by filtering out null/undefined values
-          const labelParts = [];
-            if (feature.attributes.metric_num !== null && feature.attributes.metric_num !== undefined) {
-            labelParts.push(feature.attributes.metric_num);
-            } else {
-            // If metric_num is not available, skip the rest
-            feature.attributes.custom_label = '';
-            return;
+      // Process features to handle null values in labels (only for building layers)
+      if (layerType === 'buildings') {
+        features.forEach(feature => {
+          if (feature.attributes) {
+            // Create a custom label by filtering out null/undefined values
+            const labelParts = [];
+              if (feature.attributes.metric_num !== null && feature.attributes.metric_num !== undefined) {
+              labelParts.push(feature.attributes.metric_num);
+              } else {
+              // If metric_num is not available, skip the rest
+              feature.attributes.custom_label = '';
+              return;
+              }
+            if (feature.attributes.rd_naeng !== null && feature.attributes.rd_naeng !== undefined) {
+              labelParts.push(feature.attributes.rd_naeng);
             }
-          if (feature.attributes.rd_naeng !== null && feature.attributes.rd_naeng !== undefined) {
-            labelParts.push(feature.attributes.rd_naeng);
+            if (feature.attributes.tole_ne_en !== null && feature.attributes.tole_ne_en !== undefined) {
+              labelParts.push(feature.attributes.tole_ne_en);
+            }
+            // Set the custom label attribute
+            feature.attributes.custom_label = labelParts.join('\n');
           }
-          if (feature.attributes.tole_ne_en !== null && feature.attributes.tole_ne_en !== undefined) {
-            labelParts.push(feature.attributes.tole_ne_en);
-          }
-          // Set the custom label attribute
-          feature.attributes.custom_label = labelParts.join('\n');
-        }
-      });
+        });
+      }
       
       // Add features to layer
       vectorLayer.addFeatures(features);
@@ -1963,13 +2079,20 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
       // Add layer to map
       W.map.addLayer(vectorLayer);
       vectorLayer.setVisibility(true);
-      vectorLayer.setZIndex(ZIndexes.popup + 10);
+      
+      // Set z-index based on layer type - boundaries below buildings
+      if (layerType === 'boundary') {
+        vectorLayer.setZIndex(ZIndexes.popup + 5);
+      } else {
+        vectorLayer.setZIndex(ZIndexes.popup + 10);
+      }
       
       // Store reference for cleanup
       loadedGeoJSONLayers.push({
         layer: vectorLayer,
         name: layerName,
-        wardNo: wardNo
+        wardNo: wardNo,
+        layerType: layerType
       });
       
       // Update layer selector dropdown
