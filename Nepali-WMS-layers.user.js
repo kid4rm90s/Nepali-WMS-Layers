@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.02.06.04
+// @version       2026.02.06.05
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
@@ -34,7 +34,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 (function main() {
   ('use strict');
   const updateMessage =
-'<strong>New Feature:</strong><br> - Load LMC Ward Buildings and Boundaries from geonep.com.np';
+'<strong>New Feature:</strong><br> - Shift ward buildings and boundaries together';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -92,7 +92,19 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     const layerInfo = loadedGeoJSONLayers.find(l => l.name === layerName);
     if (!layerInfo) return;
 
-    const layer = layerInfo.layer;
+    // Find paired layer (boundary/building)
+    const layersToShift = [layerInfo];
+    const wardNo = layerInfo.wardNo;
+    if (wardNo) {
+      const pairedLayerName = layerInfo.layerType === 'buildings' 
+        ? `LMC_Ward_${wardNo}_Boundary`
+        : `LMC_Ward_${wardNo}_Buildings`;
+      const pairedLayer = loadedGeoJSONLayers.find(l => l.name === pairedLayerName);
+      if (pairedLayer) {
+        layersToShift.push(pairedLayer);
+      }
+    }
+
     const map = W.map;
     const proj = map.getProjectionObject();
 
@@ -127,26 +139,35 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
       }
     }
 
-    // Initialize offset if not exists
-    if (!geoJsonLayerOffsets[layerName]) {
-      geoJsonLayerOffsets[layerName] = { x: 0, y: 0 };
-    }
-
-    // Update offset
-    geoJsonLayerOffsets[layerName].x += dx;
-    geoJsonLayerOffsets[layerName].y += dy;
-
-    // Apply offset to all features
-    layer.features.forEach(feature => {
-      if (feature.geometry && feature.geometry.move) {
-        feature.geometry.move(dx, dy);
+    // Shift all paired layers together
+    layersToShift.forEach(info => {
+      const layerToShift = info.layer;
+      const shiftLayerName = info.name;
+      
+      // Initialize offset if not exists
+      if (!geoJsonLayerOffsets[shiftLayerName]) {
+        geoJsonLayerOffsets[shiftLayerName] = { x: 0, y: 0 };
       }
+
+      // Update offset
+      geoJsonLayerOffsets[shiftLayerName].x += dx;
+      geoJsonLayerOffsets[shiftLayerName].y += dy;
+
+      // Apply offset to all features
+      layerToShift.features.forEach(feature => {
+        if (feature.geometry && feature.geometry.move) {
+          feature.geometry.move(dx, dy);
+        }
+      });
+
+      // Redraw layer
+      layerToShift.redraw();
     });
 
-    // Redraw layer
-    layer.redraw();
-
-    WazeToastr.Alerts.info('Layer Shifted', `Layer shifted ${dist} meters ${direction}.`, false, false, 2000);
+    const shiftMsg = layersToShift.length > 1 
+      ? `Ward ${wardNo} layers shifted ${dist} meters ${direction}`
+      : `Layer shifted ${dist} meters ${direction}`;
+    WazeToastr.Alerts.info('Layer Shifted', shiftMsg, false, false, 2000);
   }
 
   // Helper: reset GeoJSON layer shift
@@ -164,24 +185,47 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     const layerInfo = loadedGeoJSONLayers.find(l => l.name === layerName);
     if (!layerInfo) return;
 
-    const layer = layerInfo.layer;
-    const offset = geoJsonLayerOffsets[layerName];
+    // Find paired layer (boundary/building)
+    const layersToReset = [layerInfo];
+    const wardNo = layerInfo.wardNo;
+    if (wardNo) {
+      const pairedLayerName = layerInfo.layerType === 'buildings' 
+        ? `LMC_Ward_${wardNo}_Boundary`
+        : `LMC_Ward_${wardNo}_Buildings`;
+      const pairedLayer = loadedGeoJSONLayers.find(l => l.name === pairedLayerName);
+      if (pairedLayer) {
+        layersToReset.push(pairedLayer);
+      }
+    }
 
-    if (offset && (offset.x !== 0 || offset.y !== 0)) {
-      // Move back to original position
-      layer.features.forEach(feature => {
-        if (feature.geometry && feature.geometry.move) {
-          feature.geometry.move(-offset.x, -offset.y);
-        }
-      });
+    let hasOffset = false;
+    layersToReset.forEach(info => {
+      const resetLayer = info.layer;
+      const resetLayerName = info.name;
+      const offset = geoJsonLayerOffsets[resetLayerName];
 
-      // Reset offset
-      geoJsonLayerOffsets[layerName] = { x: 0, y: 0 };
+      if (offset && (offset.x !== 0 || offset.y !== 0)) {
+        hasOffset = true;
+        // Move back to original position
+        resetLayer.features.forEach(feature => {
+          if (feature.geometry && feature.geometry.move) {
+            feature.geometry.move(-offset.x, -offset.y);
+          }
+        });
 
-      // Redraw layer
-      layer.redraw();
+        // Reset offset
+        geoJsonLayerOffsets[resetLayerName] = { x: 0, y: 0 };
 
-      WazeToastr.Alerts.success('Shift Reset', 'Layer position reset to original.', false, false, 2000);
+        // Redraw layer
+        resetLayer.redraw();
+      }
+    });
+
+    if (hasOffset) {
+      const resetMsg = layersToReset.length > 1
+        ? `Ward ${wardNo} layers position reset to original`
+        : 'Layer position reset to original';
+      WazeToastr.Alerts.success('Shift Reset', resetMsg, false, false, 2000);
     } else {
       WazeToastr.Alerts.info('No Shift', 'Layer has no offset to reset.', false, false, 2000);
     }
