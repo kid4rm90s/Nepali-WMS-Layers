@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.02.06.02
+// @version       2026.02.06.03
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
@@ -1938,9 +1938,13 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
         if (feature.attributes) {
           // Create a custom label by filtering out null/undefined values
           const labelParts = [];
-          if (feature.attributes.metric_num !== null && feature.attributes.metric_num !== undefined) {
+            if (feature.attributes.metric_num !== null && feature.attributes.metric_num !== undefined) {
             labelParts.push(feature.attributes.metric_num);
-          }
+            } else {
+            // If metric_num is not available, skip the rest
+            feature.attributes.custom_label = '';
+            return;
+            }
           if (feature.attributes.rd_naeng !== null && feature.attributes.rd_naeng !== undefined) {
             labelParts.push(feature.attributes.rd_naeng);
           }
