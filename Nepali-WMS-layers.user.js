@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.02.01.00
+// @version       2026.02.08.00
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
