@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.02.06.06
+// @version       2026.02.01.00
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
@@ -13,7 +13,7 @@
 // @grant         GM_xmlhttpRequest
 // @require       https://greasyfork.org/scripts/560385/code/WazeToastr.js
 // @require      https://update.greasyfork.org/scripts/516445/1480246/Make%20GM%20xhr%20more%20parallel%20again.js
-// @require       https://kid4rm90s.github.io/preeti2unicode/preeti.js
+// @require       https://cdn.jsdelivr.net/gh/kid4rm90s/preeti2unicode@latest/preeti.js
 // @downloadURL   https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
 // @updateURL     https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js
 // @connect       geoserver.softwel.com.np
@@ -36,7 +36,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 (function main() {
   ('use strict');
   const updateMessage =
-'<strong>New Feature:</strong><br> - Shift ward buildings and boundaries together';
+'<strong>New Feature:</strong><br> - Shift ward buildings and boundaries together <br> - Fixed issue with Nepali font not displayed correctly';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
