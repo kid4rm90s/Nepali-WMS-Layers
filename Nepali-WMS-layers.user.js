@@ -13,7 +13,7 @@
 // @grant         GM_xmlhttpRequest
 // @require       https://greasyfork.org/scripts/560385/code/WazeToastr.js
 // @require      https://update.greasyfork.org/scripts/516445/1480246/Make%20GM%20xhr%20more%20parallel%20again.js
-// @require       https://cdn.jsdelivr.net/gh/kid4rm90s/preeti2unicode@latest/preeti.js
+// @require       https://cdn.jsdelivr.net/gh/kid4rm90s/preeti2unicode@1.1.0/preeti.js
 // @downloadURL   https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
 // @updateURL     https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js
 // @connect       geoserver.softwel.com.np
