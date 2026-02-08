@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.02.08.01
+// @version       2026.02.08.02
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
@@ -13,14 +13,14 @@
 // @grant         GM_xmlhttpRequest
 // @require       https://greasyfork.org/scripts/560385/code/WazeToastr.js
 // @require       https://update.greasyfork.org/scripts/516445/1480246/Make%20GM%20xhr%20more%20parallel%20again.js
-// @require       https://greasyfork.org/en/scripts/565546-preeti-to-unicode-converter/code/preeti.js
-// @downloadURL   https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
-// @updateURL     https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js
+// @require https://update.greasyfork.org/scripts/565546/1750869/Preeti%20to%20Unicode%20Converter.js
 // @connect       geoserver.softwel.com.np
 // @connect       admin.nationalgeoportal.gov.np
 // @connect       localhost:8080
 // @connect       greasyfork.org
 // @connect       geonep.com.np
+// @downloadURL   https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
+// @updateURL     https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js
 // ==/UserScript==
 
 /*  Scripts modified from Czech WMS layers (https://greasyfork.org/cs/scripts/35069-czech-wms-layers; https://greasyfork.org/en/scripts/34720-private-czech-wms-layers, https://greasyfork.org/en/scripts/28160) 
