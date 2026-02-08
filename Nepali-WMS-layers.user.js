@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.02.08.00
+// @version       2026.02.08.01
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
@@ -13,7 +13,7 @@
 // @grant         GM_xmlhttpRequest
 // @require       https://greasyfork.org/scripts/560385/code/WazeToastr.js
 // @require       https://update.greasyfork.org/scripts/516445/1480246/Make%20GM%20xhr%20more%20parallel%20again.js
-// @require       https://update.greasyfork.org/scripts/565546/code/Preeti%20to%20Unicode%20Converter.js
+// @require       https://greasyfork.org/en/scripts/565546-preeti-to-unicode-converter/code/preeti.js
 // @downloadURL   https://update.greasyfork.org/scripts/521924-nepali-wms-layers.user.js
 // @updateURL     https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js
 // @connect       geoserver.softwel.com.np
@@ -2070,7 +2070,7 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
           labelOutlineWidth: 3,
           fontSize: fontSize + 'px',
           fontWeight: 'bold',
-          fontFamily: 'Preeti, inherit',
+          fontFamily: 'inherit',
           fontColor: fontColor,
         });
         selectStyle = new OL.Style({
