@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.02.08.02
+// @version       2026.04.16.002
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
@@ -11,6 +11,7 @@
 // @namespace     https://greasyfork.org/en/users/1087400-kid4rm90s
 // @license       MIT
 // @grant         GM_xmlhttpRequest
+// @grant         unsafeWindow
 // @require       https://greasyfork.org/scripts/560385/code/WazeToastr.js
 // @require       https://update.greasyfork.org/scripts/516445/1480246/Make%20GM%20xhr%20more%20parallel%20again.js
 // @require https://update.greasyfork.org/scripts/565546/1750869/Preeti%20to%20Unicode%20Converter.js
@@ -35,7 +36,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 (function main() {
   ('use strict');
   const updateMessage =
-'<strong>New Feature:</strong><br> - Shift ward buildings and boundaries together <br> - Fixed issue with Nepali font not displayed correctly';
+'<strong>Fixed:</strong><br> - Compability with latest WME version.<br><br> - swapped W.map.olMap with W.map.getOLMap() to fix layers not showing up issue. <br><br> Thanks to davidsl4 to pointing out.';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -243,9 +244,9 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
       156543.03390625, 78271.516953125, 39135.7584765625, 19567.87923828125, 9783.939619140625, 4891.9698095703125, 2445.9849047851562, 1222.9924523925781, 611.4962261962891, 305.74811309814453, 152.87405654907226, 76.43702827453613,
       38.218514137268066, 19.109257068634033, 9.554628534317017, 4.777314267158508, 2.388657133579254, 1.194328566789627, 0.5971642833948135, 0.298582141697406, 0.149291070848703, 0.0746455354243515, 0.0373227677121757,
     ];
-    ZIndexes.base = W.map.olMap.Z_INDEX_BASE.Overlay + 20;
-    ZIndexes.overlay = W.map.olMap.Z_INDEX_BASE.Overlay + 100;
-    ZIndexes.popup = W.map.olMap.Z_INDEX_BASE.Overlay + 500;
+    ZIndexes.base = W.map.getOLMap().Z_INDEX_BASE.Overlay + 20;
+    ZIndexes.overlay = W.map.getOLMap().Z_INDEX_BASE.Overlay + 100;
+    ZIndexes.popup = W.map.getOLMap().Z_INDEX_BASE.Overlay + 500;
 
     // adresy WMS služeb * WMS service addresses
     var service_wms_PL2023 = {
@@ -496,7 +497,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     restoreLayerTogglerStates();
     /*********************  start of popup code ***************************/
     // --- WMS GetFeatureInfo popup for SSRN Pavement Layer ---
-    const map = W.map.olMap;
+    const map = W.map.getOLMap();
 
     // Helper: get all visible supported WMS layers for popup
     function getAllVisibleWMSLayerInfo() {
@@ -951,7 +952,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
       }
     });
 
-    const { tabLabel, tabPane } = W.userscripts.registerSidebarTab('wms-NP-layers');
+    const { tabLabel, tabPane } = await wmeSDK.Sidebar.registerScriptTab();
     tabLabel.innerText = 'WMS-NP';
     tabLabel.title = 'Nepali WMS Layers';
     tabLabel.id = 'sidepanel-wms';
@@ -1363,7 +1364,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     var geoJsonShiftDistInput = document.createElement('input');
     geoJsonShiftDistInput.type = 'number';
     geoJsonShiftDistInput.id = 'geoJsonShiftDistance';
-    geoJsonShiftDistInput.value = '10';
+    geoJsonShiftDistInput.value = '1'; // default 1 meter shift in direction of arrow clicked
     geoJsonShiftDistInput.min = '0';
     geoJsonShiftDistInput.step = '1';
     geoJsonShiftDistInput.style.width = '100%';
@@ -1461,7 +1462,6 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 
     tabPane.appendChild(geoJsonSection);
 
-    await W.userscripts.waitForElementConnected(tabPane);
     fillWMSLayersSelectList();
     opacityRange.addEventListener('input', function () {
       var value = document.getElementById('WMSLayersSelect').value;
@@ -1472,25 +1472,25 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
       }
     });
     WMSSelect.addEventListener('change', function () {
-      var selectedLayer = W.map.layers.filter((layer) => layer.name == WMSSelect.value)[0];
+      var selectedLayer = W.map.getLayers().filter((layer) => layer.name == WMSSelect.value)[0];
       if (selectedLayer) {
         opacityRange.value = selectedLayer.opacity * 100;
         document.getElementById('WMSOpacityLabel').textContent = 'Layer transparency: ' + document.getElementById('WMSOpacity').value + ' %';
       }
     });
     setZOrdering(WMSLayerTogglers);
-    W.map.events.register('addlayer', null, fillWMSLayersSelectList);
-    W.map.events.register('removelayer', null, fillWMSLayersSelectList);
-    W.map.events.register('addlayer', null, setZOrdering(WMSLayerTogglers));
-    W.map.events.register('removelayer', null, setZOrdering(WMSLayerTogglers));
-    W.map.events.register('moveend', null, setZOrdering(WMSLayerTogglers));
+    wmeSDK.Events.on({ eventName: 'wme-map-layer-added', eventHandler: fillWMSLayersSelectList });
+    wmeSDK.Events.on({ eventName: 'wme-map-layer-removed', eventHandler: fillWMSLayersSelectList });
+    wmeSDK.Events.on({ eventName: 'wme-map-layer-added', eventHandler: () => setZOrdering(WMSLayerTogglers) });
+    wmeSDK.Events.on({ eventName: 'wme-map-layer-removed', eventHandler: () => setZOrdering(WMSLayerTogglers) });
+    wmeSDK.Events.on({ eventName: 'wme-map-move-end', eventHandler: () => setZOrdering(WMSLayerTogglers) });
   }
 
   function fillWMSLayersSelectList() {
     const select = document.getElementById('WMSLayersSelect');
     const value = select.value;
     let htmlCode = '';
-    W.map.layers.filter((layer) => layer.params?.SERVICE === 'WMS').forEach((layer) => (htmlCode += `<option value='${layer.name}'>${layer.name}</option><br>`));
+    W.map.getLayers().filter((layer) => layer.params?.SERVICE === 'WMS').forEach((layer) => (htmlCode += `<option value='${layer.name}'>${layer.name}</option><br>`));
     select.innerHTML = htmlCode;
     select.value = value;
   }
@@ -2284,13 +2284,18 @@ function scriptupdatemonitor() {
     setTimeout(scriptupdatemonitor, 250);
   }
 }
+  function bootstrap() {
+    wmeSDK = unsafeWindow.getWmeSdk({ scriptId: 'nepali-wms-layers-beta', scriptName });
+    console.log(`${scriptName} initialized.`);
 scriptupdatemonitor();
-console.log(`${scriptName} initialized.`);
+    document.addEventListener('wme-map-data-loaded', init, { once: true });
+  }
 
-  //document.addEventListener('wme-map-data-loaded', init, { once: true });
-  document.addEventListener('wme-map-data-loaded', () => setTimeout(init, 2000), { once: true });
+  unsafeWindow.SDK_INITIALIZED.then(bootstrap);
   /*
 changeLog
+2026-04-16.1
+<strong>Fixed:</strong><br> - Compability with latest WME version.<br><br> - swapped W.map.olMap with W.map.getOLMap() to fix layers not showing up issue. <br><br> Thanks to davidsl4 to pointing out.
 2026.02.06.06
 - Added Preeti font to Unicode conversion for rd_nanep field
 - Building labels now display Nepali text in proper Unicode format
