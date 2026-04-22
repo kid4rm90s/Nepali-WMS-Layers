@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.04.22.001
+// @version       2026.04.22.002
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
@@ -354,7 +354,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     var groupTogglerNames = addGroupToggler(false, 'layer-switcher-group_names', 'NP names and addresses');
     var groupTogglerBorders = addGroupToggler(false, 'layer-switcher-group_borders', 'NP Borders');
     var groupTogglerExternal = addGroupToggler(false, 'layer-switcher-group_external', 'External Maps!!!');
-    var groupTogglerLalitpur = addGroupToggler(false, 'layer-switcher-group_lalitpur', 'Lalitpur MC HN!');
+    //var groupTogglerLalitpur = addGroupToggler(false, 'layer-switcher-group_lalitpur', 'Lalitpur MC HN!');
     //vrstvy v menu * layers in the menu
     /************************How To add LayerTogglers***************************
 	WMSLayerTogglers.*(1)* = addLayerToggler(groupTogglerPlaces, "*(2)*", false, [addNewLayer("*(1)*", *(3)*, "*(4)*")]);
