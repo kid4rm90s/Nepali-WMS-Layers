@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.04.22.002
+// @version       2026.05.20.009
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
@@ -24,7 +24,7 @@
 // @updateURL     https://update.greasyfork.org/scripts/521924-nepali-wms-layers.meta.js
 // ==/UserScript==
 
-/*  Scripts modified from Czech WMS layers (https://greasyfork.org/cs/scripts/35069-czech-wms-layers; https://greasyfork.org/en/scripts/34720-private-czech-wms-layers, https://greasyfork.org/en/scripts/28160) 
+/*  Scripts modified from Czech WMS layers (https://greasyfork.org/en/scripts/35069-czech-wms-layers; https://greasyfork.org/en/scripts/34720-private-czech-wms-layers, https://greasyfork.org/en/scripts/28160)
 orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https://greasyfork.org/en/scripts/519676-croatian-wms-layers) author: JS55CT */
 
 /* global W */
@@ -36,7 +36,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 (function main() {
   ('use strict');
   const updateMessage =
-'<strong>Fixed:</strong><br> - Removed unused LMC layers';
+'<strong>Fixed:</strong><br>- Fixed issue where script fails to load. <br>- Most of the code is currently using WMESDK and its equivalent APIs.';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -348,13 +348,13 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     };
 
     //skupiny vrstev v menu * layer groups in the menu
-    var groupTogglerPlaces = addGroupToggler(true, 'layer-switcher-group_places');
-    var groupTogglerRoad = addGroupToggler(true, 'layer-switcher-group_road');
-    // var groupTogglerDisplay = addGroupToggler(true, "layer-switcher-group_display");
+    // DOM-based approach: manually create wz-checkbox elements (same pattern as geofile.js)
+    var groupTogglerPlaces = addGroupToggler(false, 'layer-switcher-group_np_places', 'NP Places');
+    var groupTogglerRoad = addGroupToggler(false, 'layer-switcher-group_np_road', 'NP Roads');
     var groupTogglerNames = addGroupToggler(false, 'layer-switcher-group_names', 'NP names and addresses');
     var groupTogglerBorders = addGroupToggler(false, 'layer-switcher-group_borders', 'NP Borders');
     var groupTogglerExternal = addGroupToggler(false, 'layer-switcher-group_external', 'External Maps!!!');
-    //var groupTogglerLalitpur = addGroupToggler(false, 'layer-switcher-group_lalitpur', 'Lalitpur MC HN!');
+
     //vrstvy v menu * layers in the menu
     /************************How To add LayerTogglers***************************
 	WMSLayerTogglers.*(1)* = addLayerToggler(groupTogglerPlaces, "*(2)*", false, [addNewLayer("*(1)*", *(3)*, "*(4)*")]);
@@ -386,19 +386,9 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     WMSLayerTogglers.wms_BSM_Bridge = addLayerToggler(groupTogglerRoad, 'Bridges (BSM)', false, [addNewLayer('wms_BSM_Bridge', service_wms_softwel, 'bsm:bsm_nc_primary_detail,bsm:nc_primary_detail_code,bsm:bsm_bi_primary_detail', ZIndexes.popup)]);
     WMSLayerTogglers.wms_prtmp_bridge = addLayerToggler(groupTogglerRoad, 'Bridges (PRTMP)', false, [addNewLayer('wms_prtmp_bridge', service_wms_softwel, 'prtmp_01:bridge_inventory_local,prtmp_01:local_bridge,prtmp_01:major_bridge', ZIndexes.popup)]);
 
-    //ZOBRAZENÍ * DISPLAY
-    // WMSLayerTogglers.wms_orto = addLayerToggler(groupTogglerDisplay, "Ortofoto ČUZK", true, [addNewLayer("wms_orto", service_wms_orto, "GR_ORTFOTORGB", ZIndexes.base)]);
-
     //ČÚZK NÁZVY A ADRESY * ČÚZK NAMES AND ADDRESSES
     WMSLayerTogglers.wms_mun_name = addLayerToggler(groupTogglerNames, 'BSM Municipality Names', false, [addNewLayer('wms_mun_name', service_wms_softwel, 'bsm:bsm_localbodies_label')]);
     WMSLayerTogglers.wms_junction_name = addLayerToggler(groupTogglerNames, 'SSRN Junction Names', false, [addNewLayer('wms_junction_name', service_wms_softwel, 'ssrn:ssrn_junction_name')]);
-    // WMSLayerTogglers.wms_lalitpur_metric_house = addLayerToggler(groupTogglerNames, 'Lalitpur Metric House', false, [
-    //   addNewLayer(
-    //     'wms_lalitpur_metric_house',
-    //     service_wms_geo_lalitpur,
-    //     'geo-lalitpur:lmc_w-01_metric_house,geo-lalitpur:lmc_w-02_metric_house,geo-lalitpur:lmc_w-03_metric_house,geo-lalitpur:lmc_w-04_metric_house,geo-lalitpur:lmc_w-05_metric_house,geo-lalitpur:lmc_w-06_metric_house,geo-lalitpur:lmc_w-07_metric_house,geo-lalitpur:lmc_w-08_metric_house,geo-lalitpur:lmc_w-09_metric_house,geo-lalitpur:lmc_w-10_metric_house,geo-lalitpur:lmc_w-11_metric_house,geo-lalitpur:lmc_w-12_metric_house,geo-lalitpur:lmc_w-13_metric_house,geo-lalitpur:lmc_w-14_metric_house,geo-lalitpur:lmc_w-15_metric_house,geo-lalitpur:lmc_w-16_metric_house,geo-lalitpur:lmc_w-17_metric_house,geo-lalitpur:lmc_w-18_metric_house,geo-lalitpur:lmc_w-19_metric_house,geo-lalitpur:lmc_w-20_metric_house,geo-lalitpur:lmc_w-22_metric_house,geo-lalitpur:lmc_w-23_metric_house,geo-lalitpur:lmc_w-24_metric_house,geo-lalitpur:lmc_w-25_metric_house,geo-lalitpur:lmc_w-26_metric_house,geo-lalitpur:lmc_w-27_metric_house,geo-lalitpur:lmc_w-28_metric_house,geo-lalitpur:lmc_w-29_metric_house'
-    //   ),
-    // ]);
 
     //ČÚZK HRANICE * BORDER BOARD
     WMSLayerTogglers.wms_geonational = addLayerToggler(groupTogglerBorders, 'Geoportal National Border', false, [addNewLayer('wms_geonational', service_wms_geoportal, 'geonode:nepal')]);
@@ -409,13 +399,6 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     WMSLayerTogglers.wms_district = addLayerToggler(groupTogglerBorders, 'SSRN District Border', false, [addNewLayer('wms_district', service_wms_softwel, 'ssrn:ssrn_district_boundary_line')]);
     WMSLayerTogglers.wms_geomunicipality = addLayerToggler(groupTogglerBorders, 'Geoportal Municipality Border', false, [addNewLayer('wms_geomunicipality', service_wms_geoportal, 'geonode:NepalLocalUnits0')]);
     WMSLayerTogglers.wms_municipality = addLayerToggler(groupTogglerBorders, 'BSM Municipality Border', false, [addNewLayer('wms_municipality', service_wms_softwel, 'bsm:bsm_localbodies_line')]);
-    // WMSLayerTogglers.wms_lalitpur_boundary = addLayerToggler(groupTogglerBorders, 'Lalitpur Ward Boundary', false, [
-    //   addNewLayer(
-    //     'wms_lalitpur_boundary',
-    //     service_wms_geo_lalitpur,
-    //     'geo-lalitpur:lmc_w-01_boundary,geo-lalitpur:lmc_w-02_boundary,geo-lalitpur:lmc_w-03_boundary,geo-lalitpur:lmc_w-04_boundary,geo-lalitpur:lmc_w-05_boundary,geo-lalitpur:lmc_w-06_boundary,geo-lalitpur:lmc_w-07_boundary,geo-lalitpur:lmc_w-08_boundary,geo-lalitpur:lmc_w-09_boundary,geo-lalitpur:lmc_w-10_boundary,geo-lalitpur:lmc_w-11_boundary,geo-lalitpur:lmc_w-12_boundary,geo-lalitpur:lmc_w-13_boundary,geo-lalitpur:lmc_w-14_boundary,geo-lalitpur:lmc_w-15_boundary,geo-lalitpur:lmc_w-16_boundary,geo-lalitpur:lmc_w-17_boundary,geo-lalitpur:lmc_w-18_boundary,geo-lalitpur:lmc_w-19_boundary,geo-lalitpur:lmc_w-20_boundary,geo-lalitpur:lmc_w-22_boundary,geo-lalitpur:lmc_w-23_boundary,geo-lalitpur:lmc_w-24_boundary,geo-lalitpur:lmc_w-25_boundary,geo-lalitpur:lmc_w-26_boundary,geo-lalitpur:lmc_w-27_boundary,geo-lalitpur:lmc_w-28_boundary,geo-lalitpur:lmc_w-29_boundary'
-    //   ),
-    // ]);
 
     //EXTERNÍ MAPY * EXTERNAL MAPS
     WMSLayerTogglers.xyz_livemap = addLayerToggler(groupTogglerExternal, 'Waze LiveMap', false, [addNewLayer('xyz_livemap', service_xyz_livemap)]);
@@ -426,36 +409,6 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     WMSLayerTogglers.xyz_osm = addLayerToggler(groupTogglerExternal, 'OpenStreetMaps', false, [addNewLayer('xyz_osm', service_xyz_osm)]);
     WMSLayerTogglers.xyz_april = addLayerToggler(groupTogglerExternal, 'Apríl !!!', false, [addNewLayer('xyz_april', service_xyz_april)]);
 
-    //LALITPUR METRO CITY METRIC HOUSE NUMBERING
-    /*WMSLayerTogglers.wms_lmc_ward1 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 1', false, [addNewLayer('wms_lmc_ward1', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-01_metric_house,geo-lalitpur:lmc_w-01_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward2 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 2', false, [addNewLayer('wms_lmc_ward2', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-02_metric_house,geo-lalitpur:lmc_w-02_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward3 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 3', false, [addNewLayer('wms_lmc_ward3', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-03_metric_house,geo-lalitpur:lmc_w-03_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward4 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 4', false, [addNewLayer('wms_lmc_ward4', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-04_metric_house,geo-lalitpur:lmc_w-04_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward5 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 5', false, [addNewLayer('wms_lmc_ward5', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-05_metric_house,geo-lalitpur:lmc_w-05_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward6 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 6', false, [addNewLayer('wms_lmc_ward6', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-06_metric_house,geo-lalitpur:lmc_w-06_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward7 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 7', false, [addNewLayer('wms_lmc_ward7', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-07_metric_house,geo-lalitpur:lmc_w-07_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward8 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 8', false, [addNewLayer('wms_lmc_ward8', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-08_metric_house,geo-lalitpur:lmc_w-08_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward9 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 9', false, [addNewLayer('wms_lmc_ward9', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-09_metric_house,geo-lalitpur:lmc_w-09_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward10 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 10', false, [addNewLayer('wms_lmc_ward10', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-10_metric_house,geo-lalitpur:lmc_w-10_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward11 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 11', false, [addNewLayer('wms_lmc_ward11', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-11_metric_house,geo-lalitpur:lmc_w-11_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward12 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 12', false, [addNewLayer('wms_lmc_ward12', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-12_metric_house,geo-lalitpur:lmc_w-12_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward13 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 13', false, [addNewLayer('wms_lmc_ward13', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-13_metric_house,geo-lalitpur:lmc_w-13_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward14 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 14', false, [addNewLayer('wms_lmc_ward14', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-14_metric_house,geo-lalitpur:lmc_w-14_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward15 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 15', false, [addNewLayer('wms_lmc_ward15', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-15_metric_house,geo-lalitpur:lmc_w-15_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward16 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 16', false, [addNewLayer('wms_lmc_ward16', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-16_metric_house,geo-lalitpur:lmc_w-16_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward17 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 17', false, [addNewLayer('wms_lmc_ward17', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-17_metric_house,geo-lalitpur:lmc_w-17_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward18 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 18', false, [addNewLayer('wms_lmc_ward18', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-18_metric_house,geo-lalitpur:lmc_w-18_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward19 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 19', false, [addNewLayer('wms_lmc_ward19', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-19_metric_house,geo-lalitpur:lmc_w-19_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward20 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 20', false, [addNewLayer('wms_lmc_ward20', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-20_metric_house,geo-lalitpur:lmc_w-20_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward21 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 21', false, [addNewLayer('wms_lmc_ward21', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-21_metric_house,geo-lalitpur:lmc_w-21_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward22 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 22', false, [addNewLayer('wms_lmc_ward22', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-22_metric_house,geo-lalitpur:lmc_w-22_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward23 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 23', false, [addNewLayer('wms_lmc_ward23', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-23_metric_house,geo-lalitpur:lmc_w-23_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward24 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 24', false, [addNewLayer('wms_lmc_ward24', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-24_metric_house,geo-lalitpur:lmc_w-24_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward25 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 25', false, [addNewLayer('wms_lmc_ward25', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-25_metric_house,geo-lalitpur:lmc_w-25_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward26 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 26', false, [addNewLayer('wms_lmc_ward26', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-26_metric_house,geo-lalitpur:lmc_w-26_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward27 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 27', false, [addNewLayer('wms_lmc_ward27', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-27_metric_house,geo-lalitpur:lmc_w-27_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward28 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 28', false, [addNewLayer('wms_lmc_ward28', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-28_metric_house,geo-lalitpur:lmc_w-28_boundary',ZIndexes.base)]);
-    WMSLayerTogglers.wms_lmc_ward29 = addLayerToggler(groupTogglerLalitpur, 'LMC Ward 29', false, [addNewLayer('wms_lmc_ward29', service_wms_geo_lalitpur, 'geo-lalitpur:lmc_w-29_metric_house,geo-lalitpur:lmc_w-29_boundary',ZIndexes.base)]);*/
 
     // --- Layer toggler state persistence ---
     function saveLayerTogglerStates() {
@@ -497,7 +450,8 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     restoreLayerTogglerStates();
     /*********************  start of popup code ***************************/
     // --- WMS GetFeatureInfo popup for SSRN Pavement Layer ---
-    const map = W.map.getOLMap();
+    // const map = W.map.getOLMap();
+    // Note: wmeSDK.Map APIs used for map extent/size; OL2 map kept only where no SDK alternative exists
 
     // Helper: get all visible supported WMS layers for popup
     function getAllVisibleWMSLayerInfo() {
@@ -547,11 +501,23 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     // Helper: build GetFeatureInfo URL for any supported WMS layer
     function buildGetFeatureInfoUrl(service, queryLayer, evt, cqlFilter = null) {
       const wmsUrl = service.url;
-      const bbox = map.getExtent();
-      const width = map.size.w;
-      const height = map.size.h;
-      const x = Math.round(evt.xy.x);
-      const y = Math.round(evt.xy.y);
+      // getMapExtent() returns [west, south, east, north] in WGS84 degrees
+      const extent = wmeSDK.Map.getMapExtent();
+      // Convert WGS84 degrees → EPSG:3857 (Web Mercator) meters
+      const toMercX = (lon) => lon * 20037508.34 / 180;
+      const toMercY = (lat) => Math.log(Math.tan((90 + lat) * Math.PI / 360)) * 6378137;
+      const bboxLeft = toMercX(extent[0]);
+      const bboxRight = toMercX(extent[2]);
+      const bboxBottom = toMercY(extent[1]);
+      const bboxTop = toMercY(extent[3]);
+      const mapEl = wmeSDK.Map.getMapViewportElement();
+      const width = mapEl.offsetWidth;
+      const height = mapEl.offsetHeight;
+      // Derive I/J from geographic click position relative to BBOX (avoids pixel coord system mismatch)
+      const clickMercX = toMercX(evt.lon);
+      const clickMercY = toMercY(evt.lat);
+      const x = Math.round((clickMercX - bboxLeft) / (bboxRight - bboxLeft) * width);
+      const y = Math.round((bboxTop - clickMercY) / (bboxTop - bboxBottom) * height);
 
       // Handle CQL filters - priority: parameter > service URL
       let cql = '';
@@ -592,7 +558,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
         'CRS=' + crs,
         'WIDTH=' + width,
         'HEIGHT=' + height,
-        'BBOX=' + bbox.left + ',' + bbox.bottom + ',' + bbox.right + ',' + bbox.top,
+        'BBOX=' + bboxLeft + ',' + bboxBottom + ',' + bboxRight + ',' + bboxTop,
         'I=' + x,
         'J=' + y,
         featureCount,
@@ -606,7 +572,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     }
 
     // Helper: show popup at pixel position with content (custom HTML popup)
-    function showWMSPopupAtPixel(pixel, html) {
+    function showWMSPopupAtPixel(lonLat, html) {
       let popup = document.getElementById('wms-info-popup');
       if (!popup) {
         popup = document.createElement('div');
@@ -638,11 +604,12 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
         </style>
         ${html}
       `;
-      // Position popup (pixel is {x, y} relative to map viewport)
-      const mapDiv = map.div;
+      // Position popup: convert lon/lat to viewport-relative pixel, then add rect offset (mirrors production)
+      const mapDiv = wmeSDK.Map.getMapViewportElement();
       const rect = mapDiv.getBoundingClientRect();
-      popup.style.left = rect.left + pixel.x + 10 + 'px';
-      popup.style.top = rect.top + pixel.y - 10 + 'px';
+      const px = wmeSDK.Map.getMapPixelFromLonLat({ lonLat: { lon: lonLat.lon, lat: lonLat.lat } });
+      popup.style.left = rect.left + px.x + 10 + 'px';
+      popup.style.top = rect.top + px.y - 10 + 'px';
       popup.style.display = 'block';
       // Close handler
       document.getElementById('wms-info-popup-close').onclick = function (e) {
@@ -652,7 +619,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     }
 
     // Helper: show popup at pixel position with content (custom HTML popup), unique per layer
-    function showWMSPopupAtPixelForLayer(pixel, html, layerKey) {
+    function showWMSPopupAtPixelForLayer(lonLat, html, layerKey) {
       let popupId = 'wms-info-popup-' + layerKey;
       let popup = document.getElementById(popupId);
       if (!popup) {
@@ -685,13 +652,14 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
         </style>
         ${html}
       `;
-      // Position popup (pixel is {x, y} relative to map viewport)
-      const mapDiv = map.div;
+      // Position popup: convert lon/lat to viewport-relative pixel, then add rect offset (mirrors production)
+      const mapDiv = wmeSDK.Map.getMapViewportElement();
       const rect = mapDiv.getBoundingClientRect();
+      const px = wmeSDK.Map.getMapPixelFromLonLat({ lonLat: { lon: lonLat.lon, lat: lonLat.lat } });
       // Offset each popup horizontally so they don't overlap
       let offsetX = 10 + 260 * ['wms_PL2023', 'wms_PRTMP_PH', 'wms_PRTMP_PR'].indexOf(layerKey);
-      popup.style.left = rect.left + pixel.x + offsetX + 'px';
-      popup.style.top = rect.top + pixel.y - 10 + 'px';
+      popup.style.left = rect.left + px.x + offsetX + 'px';
+      popup.style.top = rect.top + px.y - 10 + 'px';
       popup.style.display = 'block';
       // Close handler
       document.getElementById(`${popupId}-close`).onclick = function (e) {
@@ -853,8 +821,8 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     }
 
     // Map click handler
-    map.events.register('click', map, function (evt) {
-      console.log('[WMS] Map clicked at', evt.xy, evt.lonlat);
+    wmeSDK.Events.on({ eventName: 'wme-map-mouse-click', eventHandler: function (evt) {
+      console.log('[WMS] Map clicked at', { viewportX: evt.viewportX, viewportY: evt.viewportY }, { lat: evt.lat, lon: evt.lon });
       const visibleLayers = getAllVisibleWMSLayerInfo();
       if (!visibleLayers.length) {
         console.log('[WMS] No supported WMS layer visible for popup.');
@@ -901,7 +869,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
               if (foundFeatures.length > 0) {
                 // Show all found features in one popup at the click location
                 let html = foundFeatures.map((f) => f.info.formatFn(f.feature)).join('<hr style="margin:6px 0;">');
-                showWMSPopupAtPixel(evt.xy, html);
+                showWMSPopupAtPixel({ lon: evt.lon, lat: evt.lat }, html);
                 console.log('[WMS] Popup shown for features:', foundFeatures);
               }
             }
@@ -912,13 +880,13 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
             if (responses === total) {
               if (foundFeatures.length > 0) {
                 let html = foundFeatures.map((f) => f.info.formatFn(f.feature)).join('<hr style="margin:6px 0;">');
-                showWMSPopupAtPixel(evt.xy, html);
+                showWMSPopupAtPixel({ lon: evt.lon, lat: evt.lat }, html);
               }
             }
           },
         });
       }
-    });
+    }});
     /*end of pop up code*/
 
     var GSVlayer = WMSLayerTogglers.xyz_google_streetview.layerArray[0].layer;
@@ -1082,7 +1050,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
       var value = document.getElementById('WMSLayersSelect').value;
       var dist = parseFloat(document.getElementById('WMSShiftDistance').value) || 0;
       if (!value || value === 'undefined' || dist === 0) return;
-      var layer = W.map.getLayerByName(value);
+      var layer = W.map.getLayers().find(l => l.name === value) || null;
       if (!layer) return;
       patchWMSLayerGetURL(layer);
       var map = W.map;
@@ -1199,7 +1167,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     btnReset.addEventListener('click', function () {
       var value = document.getElementById('WMSLayersSelect').value;
       if (!value || value === 'undefined') return;
-      var layer = W.map.getLayerByName(value);
+      var layer = W.map.getLayers().find(l => l.name === value) || null;
       if (!layer) return;
       patchWMSLayerGetURL(layer);
       wmsLayerOffsets[layer.name] = { x: 0, y: 0 };
@@ -1466,7 +1434,8 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     opacityRange.addEventListener('input', function () {
       var value = document.getElementById('WMSLayersSelect').value;
       if (value !== '' && value !== 'undefined') {
-        var layer = W.map.getLayerByName(value);
+        var layer = W.map.getLayers().find(l => l.name === value) || null;
+        if (!layer) return;
         layer.setOpacity(opacityRange.value / 100);
         document.getElementById('WMSOpacityLabel').textContent = 'Layer transparency: ' + document.getElementById('WMSOpacity').value + ' %';
       }
@@ -1721,7 +1690,7 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
       for (var key in layerTogglers) {
         for (var j = 0; j < layerTogglers[key].layerArray.length; j++) {
           if (layerTogglers[key].layerArray[j].zIndex > 0) {
-            var l = W.map.getLayerByName(layerTogglers[key].layerName);
+            var l = W.map.getLayers().find(layer => layer.name === layerTogglers[key].layerName);
             if (l !== undefined) {
               l.setZIndex(layerTogglers[key].layerArray[j].zIndex);
             }
@@ -1763,10 +1732,9 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
     const boundaryLayerName = `LMC_Ward_${wardNo}_Boundary`;
     
     // Check if layers already exist
-    const existingBuildingLayer = W.map.getLayersByName(buildingLayerName);
-    const existingBoundaryLayer = W.map.getLayersByName(boundaryLayerName);
-    if ((existingBuildingLayer && existingBuildingLayer.length > 0) || 
-        (existingBoundaryLayer && existingBoundaryLayer.length > 0)) {
+    const existingBuildingLayer = W.map.getLayers().filter(l => l.name === buildingLayerName);
+    const existingBoundaryLayer = W.map.getLayers().filter(l => l.name === boundaryLayerName);
+    if (existingBuildingLayer.length > 0 || existingBoundaryLayer.length > 0) {
       WazeToastr.Alerts.warning(
         scriptName,
         `Ward ${wardNo} layers already loaded`,
@@ -2204,72 +2172,6 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
     }
   }
 
-  // Helper: update GeoJSON layer selector dropdown
-  function updateGeoJsonLayerSelector() {
-    const select = document.getElementById('geoJsonLayerSelect');
-    if (!select) return;
-
-    // Clear existing options except first (default)
-    while (select.options.length > 1) {
-      select.remove(1);
-    }
-
-    // Add options for each loaded layer
-    loadedGeoJSONLayers.forEach(layerInfo => {
-      const option = document.createElement('option');
-      option.value = layerInfo.name;
-      option.textContent = layerInfo.name;
-      select.appendChild(option);
-    });
-
-    // Reset to default if no layers
-    if (loadedGeoJSONLayers.length === 0) {
-      select.selectedIndex = 0;
-    }
-  }
-
-  // After all WMSLayerTogglers are created:
-
-  // --- Layer toggler state persistence ---
-  // Utility to save all toggler states
-  function saveLayerTogglerStates() {
-    if (!localStorage) return;
-    const state = {};
-    for (const key in WMSLayerTogglers) {
-      const togglerId = WMSLayerTogglers[key].htmlItem;
-      const toggler = document.getElementById(togglerId);
-      if (toggler) state[key] = toggler.checked;
-    }
-    localStorage.WMSLayers = JSON.stringify(state);
-  }
-
-  // Utility to restore all toggler states
-  function restoreLayerTogglerStates() {
-    if (!localStorage.WMSLayers) return;
-    const state = JSON.parse(localStorage.WMSLayers);
-    for (const key in state) {
-      if (WMSLayerTogglers[key]) {
-        const togglerId = WMSLayerTogglers[key].htmlItem;
-        const toggler = document.getElementById(togglerId);
-        if (toggler && toggler.checked !== state[key]) {
-          toggler.checked = state[key];
-          toggler.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
-    }
-  }
-
-  // Attach change listeners to save state on toggle
-  for (const key in WMSLayerTogglers) {
-    const togglerId = WMSLayerTogglers[key].htmlItem;
-    const toggler = document.getElementById(togglerId);
-    if (toggler) {
-      toggler.addEventListener('change', saveLayerTogglerStates);
-    }
-  }
-  // Restore state after togglers are created
-  restoreLayerTogglerStates();
-
 function scriptupdatemonitor() {
   if (WazeToastr?.Ready) {
     // Create and start the ScriptUpdateMonitor
@@ -2294,6 +2196,9 @@ scriptupdatemonitor();
   unsafeWindow.SDK_INITIALIZED.then(bootstrap);
   /*
 changeLog
+2026.05.20.09
+- Fixed issue where script fails to load. 
+- Most of the code is currently using WMESDK and its equivalent APIs. 
 2026-04-16.1
 <strong>Fixed:</strong><br> - Compability with latest WME version.<br><br> - swapped W.map.olMap with W.map.getOLMap() to fix layers not showing up issue. <br><br> Thanks to davidsl4 to pointing out.
 2026.02.06.06
