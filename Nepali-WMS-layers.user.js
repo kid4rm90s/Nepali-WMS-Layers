@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Nepali WMS layers
-// @version       2026.05.20.009
+// @version       2026.05.20.010
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @match         https://www.waze.com/*/editor*
@@ -36,7 +36,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 (function main() {
   ('use strict');
   const updateMessage =
-'<strong>Fixed:</strong><br>- Fixed issue where script fails to load. <br>- Most of the code is currently using WMESDK and its equivalent APIs.';
+'<strong>Added HNs:</strong><br>- Dhangadhi Sub Metropolitan City <br>- Ghodaghodi Municipality <br>- Nepalgunj Sub Metropolitan City<br><br>';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -351,6 +351,7 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     // DOM-based approach: manually create wz-checkbox elements (same pattern as geofile.js)
     var groupTogglerPlaces = addGroupToggler(false, 'layer-switcher-group_np_places', 'NP Places');
     var groupTogglerRoad = addGroupToggler(false, 'layer-switcher-group_np_road', 'NP Roads');
+    var groupTogglerHNS = addGroupToggler(false, 'layer-switcher-group_np_hns', 'NP Metric HNs');
     var groupTogglerNames = addGroupToggler(false, 'layer-switcher-group_names', 'NP names and addresses');
     var groupTogglerBorders = addGroupToggler(false, 'layer-switcher-group_borders', 'NP Borders');
     var groupTogglerExternal = addGroupToggler(false, 'layer-switcher-group_external', 'External Maps!!!');
@@ -385,6 +386,20 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
     WMSLayerTogglers.wms_PRTMP_PR = addLayerToggler(groupTogglerRoad, 'PR 2023 (BSM/PRTMP)', false, [addNewLayer('wms_PRTMP_PR', service_wms_softwel, 'prtmp_01:road_network,prtmp_01:road_network_name', "road_class='PR';road_class='PR'")]);
     WMSLayerTogglers.wms_BSM_Bridge = addLayerToggler(groupTogglerRoad, 'Bridges (BSM)', false, [addNewLayer('wms_BSM_Bridge', service_wms_softwel, 'bsm:bsm_nc_primary_detail,bsm:nc_primary_detail_code,bsm:bsm_bi_primary_detail', ZIndexes.popup)]);
     WMSLayerTogglers.wms_prtmp_bridge = addLayerToggler(groupTogglerRoad, 'Bridges (PRTMP)', false, [addNewLayer('wms_prtmp_bridge', service_wms_softwel, 'prtmp_01:bridge_inventory_local,prtmp_01:local_bridge,prtmp_01:major_bridge', ZIndexes.popup)]);
+
+    //Metric HNs
+        // Dhangadhi
+    WMSLayerTogglers.wms_DhangadhiMetricHNS_mun_road = addLayerToggler(groupTogglerHNS, 'Dhangadhi Mun Road', false, [addNewLayer('wms_DhangadhiMetricHNS_mun_road', service_wms_softwel, 'MetricHNS:mun_road', "mun_code = 70813"),addNewLayer('wms_DhangadhiMetricHNS_mun_road', service_wms_softwel, 'MetricHNS:mun_road_noname', "mun_code = 70813")]);
+    WMSLayerTogglers.wms_DhangadhiMetricHNS_HNS = addLayerToggler(groupTogglerHNS, 'Dhangadhi House Numbers', false, [addNewLayer('wms_DhangadhiMetricHNS_HNS', service_wms_softwel, 'MetricHNS:hh', 'mun_code = 70813')]);
+    WMSLayerTogglers.wms_DhangadhiWards = addLayerToggler(groupTogglerHNS, 'Dhangadhi Wards', false, [addNewLayer('wms_DhangadhiWards', service_wms_softwel, 'MetricHNS:mhns_basemap_ward_boundary_polygon', "loc_code='70813'")]);
+// Ghodaghodi
+    WMSLayerTogglers.wms_GhodaghodiMetricHNS_mun_road = addLayerToggler(groupTogglerHNS, 'Ghodaghodi Mun Road', false, [addNewLayer('wms_GhodaghodiMetricHNS_mun_road', service_wms_softwel, 'MetricHNS:mun_road', "mun_code = 70805"),addNewLayer('wms_GhodaghodiMetricHNS_mun_road', service_wms_softwel, 'MetricHNS:mun_road_noname', "mun_code = 70805")]);
+    WMSLayerTogglers.wms_GhodaghodiMetricHNS_HNS = addLayerToggler(groupTogglerHNS, 'Ghodaghodi House Numbers', false, [addNewLayer('wms_GhodaghodiMetricHNS_HNS', service_wms_softwel, 'MetricHNS:hh', 'mun_code = 70805')]);
+    WMSLayerTogglers.wms_GhodaghodiWards = addLayerToggler(groupTogglerHNS, 'Ghodaghodi Wards', false, [addNewLayer('wms_GhodaghodiWards', service_wms_softwel, 'MetricHNS:mhns_basemap_ward_boundary_polygon', "loc_code='70805'")]);
+ // Nepalgunj   
+    WMSLayerTogglers.wms_NepalgunjMetricHNS_mun_road = addLayerToggler(groupTogglerHNS, 'Nepalgunj Mun Road', false, [addNewLayer('wms_NepalgunjMetricHNS_mun_road', service_wms_softwel, 'MetricHNS:mun_road', "mun_code = 51106"),addNewLayer('wms_NepalgunjMetricHNS_mun_road', service_wms_softwel, 'MetricHNS:mun_road_noname', "mun_code = 51106")]);
+    WMSLayerTogglers.wms_NepalgunjMetricHNS_HNS = addLayerToggler(groupTogglerHNS, 'Nepalgunj House Numbers', false, [addNewLayer('wms_NepalgunjMetricHNS_HNS', service_wms_softwel, 'MetricHNS:hh', 'mun_code = 51106')]);
+    WMSLayerTogglers.wms_NepalgunjWards = addLayerToggler(groupTogglerHNS, 'Nepalgunj Wards', false, [addNewLayer('wms_NepalgunjWards', service_wms_softwel, 'MetricHNS:mhns_basemap_ward_boundary_polygon', "loc_code='51106'")]);
 
     //ČÚZK NÁZVY A ADRESY * ČÚZK NAMES AND ADDRESSES
     WMSLayerTogglers.wms_mun_name = addLayerToggler(groupTogglerNames, 'BSM Municipality Names', false, [addNewLayer('wms_mun_name', service_wms_softwel, 'bsm:bsm_localbodies_label')]);
@@ -482,6 +497,48 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
           queryLayer: 'prtmp_01:bridge_inventory_local,prtmp_01:local_bridge,prtmp_01:major_bridge',
           displayName: 'Bridges (PRTMP)',
           formatFn: (feature) => formatFeatureInfo('BRIDGE', feature),
+        },
+        {
+          key: 'wms_DhangadhiMetricHNS_mun_road',
+          service: service_wms_softwel,
+          queryLayer: 'MetricHNS:mun_road,MetricHNS:mun_road_noname',
+          displayName: 'Dhangadhi Mun Road',
+          formatFn: (feature) => formatFeatureInfo('MUN_ROAD', feature),
+        },
+        {
+          key: 'wms_GhodaghodiMetricHNS_mun_road',
+          service: service_wms_softwel,
+          queryLayer: 'MetricHNS:mun_road,MetricHNS:mun_road_noname',
+          displayName: 'Ghodaghodi Mun Road',
+          formatFn: (feature) => formatFeatureInfo('MUN_ROAD', feature),
+        },
+        {
+          key: 'wms_NepalgunjMetricHNS_mun_road',
+          service: service_wms_softwel,
+          queryLayer: 'MetricHNS:mun_road,MetricHNS:mun_road_noname',
+          displayName: 'Nepalgunj Mun Road',
+          formatFn: (feature) => formatFeatureInfo('MUN_ROAD', feature),
+        },
+        {
+          key: 'wms_DhangadhiMetricHNS_HNS',
+          service: service_wms_softwel,
+          queryLayer: 'MetricHNS:hh',
+          displayName: 'Dhangadhi Metric HNS',
+          formatFn: (feature) => formatFeatureInfo('METRIC_HNS', feature),
+        },
+        {
+          key: 'wms_GhodaghodiMetricHNS_HNS',
+          service: service_wms_softwel,
+          queryLayer: 'MetricHNS:hh',
+          displayName: 'Ghodaghodi Metric HNS',
+          formatFn: (feature) => formatFeatureInfo('METRIC_HNS', feature),
+        },
+        {
+          key: 'wms_NepalgunjMetricHNS_HNS',
+          service: service_wms_softwel,
+          queryLayer: 'MetricHNS:hh',
+          displayName: 'Nepalgunj Metric HNS',
+          formatFn: (feature) => formatFeatureInfo('METRIC_HNS', feature),
         },
       ];
       const visible = [];
@@ -790,6 +847,29 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
             ['updated_date', 'Updated Date'],
           ],
         },
+        MUN_ROAD: {
+          title: (feature) => feature.layerName || 'Municipality Road',
+          fields: [
+            ['r_code', 'Road Code'],
+            ['r_name', 'Name'],
+            ['r_type', 'Road Type'],
+            ['r_width', 'Road Width'],
+          ],
+        },
+        METRIC_HNS: {
+          title: (feature) => feature.layerName || 'Metric House Numbers',
+          fields: [
+            ['hh_number', 'House Number'],
+            ['road_name', 'Road Name'],
+            // ['road_code', 'Road Code'],
+            ['ward_no', 'Ward No'],
+            ['hh_nameplate_status', 'Number Plate Status'],
+            [['lat', 'lon'], 'Coordinates', 'combine'],
+            ['sur_date', 'Survey Date'],
+            ['hh_link', 'More Info'],
+            ['photo1_path', null],
+          ],
+        },
       };
 
       const config = configs[type];
@@ -800,21 +880,33 @@ orgianl authors: petrjanik, d2-mac, MajkiiTelini, and Croatian WMS layers (https
 
       let html = '<table class="link-table"><tbody>';
       html += `<tr class="alert-success text-center"><th colspan="2">${layerTitle}</th></tr>`;
-      for (const [key, label] of config.fields) {
+      for (const [key, label, mode] of config.fields) {
         let value = '';
         if (Array.isArray(key)) {
-          // Handle fallback field names - try each key until we find a value
+          if (mode === 'combine') {
+            // Combine all non-empty values (e.g. lat + lon)
+            value = key.map(k => feature.properties[k]).filter(Boolean).join(', ');
+          } else {
+            // Fallback: use first non-empty value
           for (const fallbackKey of key) {
             if (feature.properties[fallbackKey]) {
               value = feature.properties[fallbackKey];
               break;
+              }
             }
           }
         } else {
           // Single field name
           value = feature.properties[key] || '';
         }
+        if (label === null) {
+          // Render as photo (value is a relative path appended to the base URL)
+          if (value) {
+            html += `<tr><td colspan="2" style="text-align:center;padding:4px 0;"><img src="https://hncdsg2.softavi.com/uploads/${value}" style="max-width:100%;border-radius:4px;" onerror="this.style.display='none'"></td></tr>`;
+          }
+        } else {
         html += `<tr><td>${label}: </td><td>${value}</td></tr>`;
+        }
       }
       html += '</tbody></table>';
       return '<div id="popup-content">' + html + '</div>';
@@ -2196,6 +2288,8 @@ scriptupdatemonitor();
   unsafeWindow.SDK_INITIALIZED.then(bootstrap);
   /*
 changeLog
+2026.05.20.10
+<strong>Added HNs:</strong><br>- Dhangadhi Sub Metropolitan City <br>- Ghodaghodi Municipality <br>- Nepalgunj Sub Metropolitan City<br><br>
 2026.05.20.09
 - Fixed issue where script fails to load. 
 - Most of the code is currently using WMESDK and its equivalent APIs. 
