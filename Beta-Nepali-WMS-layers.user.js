@@ -2360,10 +2360,14 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
       '.npw-card.npw-collapsed .npw-card-title { margin-bottom: 0; }',
       '.npw-card-body.npw-collapsed { display: none; }',
       '.npw-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; }',
-      '.npw-layer-item { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }',
+      // The checkbox and its label are targeted through the row so these rules outrank
+      // WME's own "input[type=checkbox]" styling (a lone class loses that specificity
+      // fight, which is what pushed the box out of line with the label). The physical
+      // geometry is forced because WME also sets size/margins on native checkboxes.
+      '.npw-layer-item { display: flex; align-items: center; gap: 8px; min-height: 18px; margin: 0 0 4px; }',
       '.npw-layer-item:last-child { margin-bottom: 0; }',
-      '.npw-checkbox { flex: none; margin: 0; cursor: pointer; accent-color: var(--primary, #DC143C); }',
-      '.npw-label { flex: 1; font-size: 10px; cursor: pointer; user-select: none; color: var(--content_p1, #333); }',
+      '.npw-layer-item > input.npw-checkbox { display: inline-block; flex: 0 0 auto; box-sizing: border-box; width: 14px !important; height: 14px !important; min-width: 14px; margin: 0 !important; padding: 0 !important; vertical-align: middle; align-self: center; cursor: pointer; accent-color: var(--primary, #DC143C); }',
+      '.npw-layer-item > label.npw-label { display: flex; align-items: center; flex: 1 1 auto; box-sizing: border-box; min-width: 0; margin: 0; padding: 0; font-size: 10px; line-height: 1.3; cursor: pointer; user-select: none; color: var(--content_p1, #333); }',
       '.npw-opacity-row { display: flex; align-items: center; gap: 6px; margin: 2px 0 6px; }',
       '.npw-opacity-label { min-width: 48px; font-size: 9px; font-weight: 600; color: var(--content_p2, #666); }',
       '.npw-opacity-value { min-width: 28px; text-align: right; font-size: 9px; color: var(--content_p2, #666); }',
