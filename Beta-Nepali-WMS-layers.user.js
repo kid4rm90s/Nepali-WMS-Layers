@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Beta - Nepali WMS layers
-// @version       2026.09.14.004
+// @version       2026.09.14.005
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @include      /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor.*$/
@@ -38,7 +38,7 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
 (function main() {
   ('use strict');
   const updateMessage =
-'<strong>Changed:</strong><br>- The feature-layer style defaults now match the previous LMC ward GeoJSON look: an orange (<code>#FF5722</code>) outline, 2 px at 80% opacity, <strong>no polygon fill</strong>, and white 13 px labels with a black outline centred on the feature. Ward addresses and ward boundaries share those defaults (boundaries stay unlabelled) - use the per-layer override in Settings to give one of them its own colour.<br>- Fill Opacity defaults to <strong>0</strong>, so ward polygons are outlines only; raise the slider when a filled area is wanted. A previously saved global style or layer override still wins over these defaults - press <em>Reset to defaults</em> to pick them up.<br><br>';
+'<strong>Added:</strong><br>- <strong>Only put the current view on the map</strong> (Layers tab, "Lalitpur HN Address Wards"): each loaded ward now puts only the features inside the map view - padded by 50%, the same margin the loader uses - on its layer, and tops the layer up as you pan to the rest. A ward is still fetched once and kept in memory, so panning never re-downloads. Switch it off to put the whole loaded ward back on the map.<br>- The default feature-layer style matches the previous GeoJSON look: orange (#FF5722) outline, 2 px at 80% opacity, no polygon fill, white 13 px labels with a black outline.<br><br>';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -824,6 +824,7 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
   var LMC_FETCH_CONCURRENCY = 4;  // parallel ward downloads per batch
   var LMC_MAX_LAYERS = 60;        // hard cap on the number of viewport layers
   var LMC_EVICT_PADDING = 0.5;    // keep a layer until it is 50% of a viewport clear
+  var LMC_WINDOW_PADDING = 0.5;   // ...and keep the features this far outside the view
   var LMC_EVICT_GRACE_MS = 8000;  // ...and only once it has been out of range this long
   var LMC_BUILDING_URL = 'https://geonep.com.np/LMC/ajax/x_building.php?ward_no=';
   var LMC_BOUNDARY_URL = 'https://geonep.com.np/LMC/ajax/x_ward_bnd.php?ward_no=';
@@ -838,6 +839,9 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
   var lmcEvictTimer = null;        // follow-up pass once a pending eviction's grace ends
   var lmcUpdateInFlight = false;
   var lmcBboxBuildPromise = null;
+  var lmcViewFilterEnabled = true; // put only the features inside the padded view on a layer
+  var lmcLayerWindows = {};        // layerName -> { box, ids } = what is currently on the layer
+  var _featureWindowTimer = null;  // debounce for the post-pan re-window
 
   /** Standard bbox overlap test in [minLon, minLat, maxLon, maxLat] order. */
   function lmcBboxesIntersect(a, b) {
@@ -930,6 +934,132 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
   function setLmcStatus(text) {
     var element = document.getElementById('lmcAutoStatus');
     if (element) element.textContent = text;
+  }
+
+  /* ------------------------------------------------------------------
+     "Only put the current view on the map" - feature windowing.
+
+     A ward is fetched whole (the service takes no bbox), but only the features inside
+     the (padded) view are actually put on its layer. Panning somewhere new tops the
+     layer up with the features that entered the window and takes out the ones that
+     left - the same padded-window + retain model WME uses for its own map objects, so
+     nothing is churned while the view stays inside the already loaded window.
+
+     The bbox of every feature is precomputed once at load time (properties.__bbox), so
+     re-windowing is a four-number compare per feature plus one batched add/remove call.
+     ------------------------------------------------------------------ */
+
+  /** The bbox of a feature, as precomputed at load time (null when unknown). */
+  function featureBbox(feature) {
+    var box = feature && feature.properties && feature.properties.__bbox;
+    return Array.isArray(box) && box.length === 4 ? box : null;
+  }
+
+  /** The current view grown by LMC_WINDOW_PADDING, i.e. what a layer should carry. */
+  function paddedViewBox() {
+    var viewport = lmcViewportBbox();
+    return viewport ? lmcPadBbox(viewport, LMC_WINDOW_PADDING) : null;
+  }
+
+  /** True when `outer` fully covers `inner` - then the layer needs no new features. */
+  function boxContains(outer, inner) {
+    if (!Array.isArray(outer) || !Array.isArray(inner)) return false;
+    return outer[0] <= inner[0] && outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] >= inner[3];
+  }
+
+  function addFeaturesToLmcLayer(layerName, features) {
+    if (!features.length) return;
+    wmeSDK.Map.dangerouslyAddFeaturesToLayerWithoutValidation({ features: features, layerName: layerName });
+  }
+
+  /**
+   * Makes a layer carry exactly the features inside the padded view.
+   * `force` re-windows even when the current window already covers the view - used after
+   * a load, a shift or a switch flip, when the coordinates or the mode changed.
+   */
+  function windowLayerFeatures(info, force) {
+    if (!info) return;
+
+    var record = lmcLayerWindows[info.name];
+
+    if (!lmcViewFilterEnabled) {
+      // Filter off: put the whole layer back and stop tracking a window.
+      if (!record) return;
+      delete lmcLayerWindows[info.name];
+      try {
+        addFeaturesToLmcLayer(
+          info.name,
+          info.sdkFeatures.filter(function (feature) {
+            return !record.ids[feature.id];
+          })
+        );
+      } catch (e) {
+        console.warn(scriptName + ': could not restore all features of ' + info.name, e);
+      }
+      return;
+    }
+
+    var view = paddedViewBox();
+    if (!view) return; // no map extent yet - leave the layer as it is
+    if (!force && record && boxContains(record.box, view)) return; // nothing new is needed
+
+    if (!record) {
+      // The layer is carrying everything right now (it was loaded before this switch was
+      // turned on, or the map had no extent yet). Start from "every feature is on the
+      // layer" so the diff below trims it down instead of adding duplicates.
+      record = { box: null, ids: {} };
+      info.sdkFeatures.forEach(function (feature) {
+        record.ids[feature.id] = true;
+      });
+    }
+
+    var wantedIds = {};
+    var wantedFeatures = [];
+    info.sdkFeatures.forEach(function (feature) {
+      var box = featureBbox(feature);
+      // Unknown geometry is kept, so a missing bbox can never hide data.
+      if (box && !lmcBboxesIntersect(view, box)) return;
+      wantedIds[feature.id] = true;
+      if (!record.ids[feature.id]) wantedFeatures.push(feature);
+    });
+
+    var staleIds = [];
+    Object.keys(record.ids).forEach(function (id) {
+      if (!wantedIds[id]) staleIds.push(id);
+    });
+
+    try {
+      if (staleIds.length) wmeSDK.Map.removeFeaturesFromLayer({ layerName: info.name, featureIds: staleIds });
+      addFeaturesToLmcLayer(info.name, wantedFeatures);
+    } catch (e) {
+      console.warn(scriptName + ': could not re-window ' + info.name, e);
+      return;
+    }
+
+    lmcLayerWindows[info.name] = { box: view.slice(), ids: wantedIds };
+  }
+
+  /** Re-windows every loaded feature layer (post-pan, after a switch flip, ...). */
+  function rewindowLoadedFeatureLayers(force) {
+    loadedGeoJSONLayers.forEach(function (info) {
+      windowLayerFeatures(info, force);
+    });
+  }
+
+  /** Debounced re-window after a pan/zoom, so dragging the map does not churn per frame. */
+  function scheduleFeatureWindowUpdate() {
+    if (!lmcViewFilterEnabled) return;
+    clearTimeout(_featureWindowTimer);
+    _featureWindowTimer = setTimeout(function () {
+      rewindowLoadedFeatureLayers(false);
+    }, 250);
+  }
+
+  /** Put only the features inside the padded view on the layers, or the whole ward. */
+  function setLmcViewFilterEnabled(enabled) {
+    lmcViewFilterEnabled = !!enabled;
+    saveLmcAutoState();
+    rewindowLoadedFeatureLayers(true);
   }
 
   /**
@@ -1032,6 +1162,7 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
     }
     lmcActiveLayers.delete(layerName);
     delete layerStyleStates[layerName];
+    delete lmcLayerWindows[layerName];
     delete geoJsonLayerOffsets[layerName];
     updateGeoJsonLayerSelector();
   }
@@ -1182,6 +1313,7 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
       var saved = JSON.parse(localStorage.getItem(LMC_AUTO_STORAGE_KEY) || '{}');
       lmcAutoEnabled = !!saved.enabled;
       lmcAutoRemoveEnabled = saved.autoRemove !== false;
+      lmcViewFilterEnabled = saved.viewFilter !== false;
       lmcEnabledWards = {};
       (saved.wards || []).forEach(function (ward) {
         lmcEnabledWards[Number(ward)] = true;
@@ -1198,6 +1330,7 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
         JSON.stringify({
           enabled: lmcAutoEnabled,
           autoRemove: lmcAutoRemoveEnabled,
+          viewFilter: lmcViewFilterEnabled,
           wards: Object.keys(lmcEnabledWards).map(Number),
         })
       );
@@ -1291,7 +1424,14 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
   function translateGeoJsonFeatures(features, dLon, dLat) {
     if (!features) return;
     features.forEach(function (feature) {
-      if (feature && feature.geometry) translateGeoJsonCoordinates(feature.geometry.coordinates, dLon, dLat);
+      if (!feature || !feature.geometry) return;
+      translateGeoJsonCoordinates(feature.geometry.coordinates, dLon, dLat);
+      // Keep the precomputed windowing bbox in step with the shifted coordinates,
+      // otherwise a shifted layer would be windowed against its old position.
+      var box = feature.properties && feature.properties.__bbox;
+      if (Array.isArray(box) && box.length === 4) {
+        feature.properties.__bbox = [box[0] + dLon, box[1] + dLat, box[2] + dLon, box[3] + dLat];
+      }
     });
   }
 
@@ -1376,9 +1516,11 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
       geoJsonLayerOffsets[shiftLayerName].x += dLon;
       geoJsonLayerOffsets[shiftLayerName].y += dLat;
 
-      // No geometry.move() in the SDK - translate the coordinates and re-add
+      // No geometry.move() in the SDK - translate the coordinates and re-window. A
+      // plain redraw would put every feature back, undoing the view windowing.
       translateGeoJsonFeatures(info.sdkFeatures, dLon, dLat);
-      redrawGeoJsonLayer(info);
+      if (lmcViewFilterEnabled) windowLayerFeatures(info, true);
+      else redrawGeoJsonLayer(info);
     });
 
     const shiftMsg = layersToShift.length > 1 
@@ -1424,8 +1566,9 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
         // Reset offset
         geoJsonLayerOffsets[resetLayerName] = { x: 0, y: 0 };
 
-        // Re-render layer
-        redrawGeoJsonLayer(info);
+        // Re-window (or re-render the whole layer when the view filter is off)
+        if (lmcViewFilterEnabled) windowLayerFeatures(info, true);
+        else redrawGeoJsonLayer(info);
       }
     });
 
@@ -3115,11 +3258,31 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
     lmcRemoveRow.appendChild(lmcRemoveLabel);
     wardBody.appendChild(lmcRemoveRow);
 
+    // View window: put only the features inside the padded view on the layers.
+    var lmcViewRow = npwCreate('div', 'npw-layer-item');
+    var lmcViewCheckbox = document.createElement('input');
+    lmcViewCheckbox.type = 'checkbox';
+    lmcViewCheckbox.className = 'npw-checkbox';
+    lmcViewCheckbox.id = 'lmcViewFilter';
+    lmcViewCheckbox.checked = lmcViewFilterEnabled;
+    var lmcViewLabel = npwCreate('label', 'npw-label', 'Only put the current view on the map');
+    lmcViewLabel.title = 'Put only the features inside the view (padded by ' + Math.round(LMC_WINDOW_PADDING * 100) + '%) on the layer instead of the whole loaded ward; the rest is added as you pan to it';
+    lmcViewLabel.addEventListener('click', function () {
+      lmcViewCheckbox.checked = !lmcViewCheckbox.checked;
+      lmcViewCheckbox.dispatchEvent(new Event('change'));
+    });
+    lmcViewRow.appendChild(lmcViewCheckbox);
+    lmcViewRow.appendChild(lmcViewLabel);
+    wardBody.appendChild(lmcViewRow);
+
     lmcMasterCheckbox.addEventListener('change', function () {
       setLmcAutoEnabled(lmcMasterCheckbox.checked);
     });
     lmcRemoveCheckbox.addEventListener('change', function () {
       setLmcAutoRemoveEnabled(lmcRemoveCheckbox.checked);
+    });
+    lmcViewCheckbox.addEventListener('change', function () {
+      setLmcViewFilterEnabled(lmcViewCheckbox.checked);
     });
 
     // One checkbox per ward, in a compact grid.
@@ -3191,8 +3354,10 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
       eventName: 'wme-map-move-end',
       eventHandler: function () {
         setZOrdering(WMSLayerTogglers)();
-        // Panning/zooming changes which wards are in view for the auto-loader.
+        // Panning/zooming changes which wards are in view for the auto-loader and which
+        // features belong on the layers for the view window.
         scheduleLmcViewportUpdate();
+        scheduleFeatureWindowUpdate();
       },
     });
   }
@@ -4197,6 +4362,9 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
             properties.custom_label = labelParts.join('\n');
           }
         }
+        // Precompute the bbox the view windowing compares against (see windowLayerFeatures)
+        const featureBboxBox = lmcBboxOfCoordinates(feature.geometry.coordinates);
+        if (featureBboxBox) properties.__bbox = featureBboxBox;
         sdkFeatures.push({
           id: layerName + '_' + index,
           type: 'Feature',
@@ -4222,10 +4390,31 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
       };
 
       wmeSDK.Map.addLayer(layerConfig);
-      // Bulk load - the GeoJSON was already parsed, so validation is skipped on purpose
-      wmeSDK.Map.dangerouslyAddFeaturesToLayerWithoutValidation({ features: sdkFeatures, layerName: layerName });
+
+      // Bulk load - the GeoJSON was already parsed, so validation is skipped on purpose.
+      // With the view filter on, only the features inside the padded view go on the layer
+      // now; windowLayerFeatures() then tops the layer up as the map is panned.
+      const initialViewBox = lmcViewFilterEnabled ? paddedViewBox() : null;
+      const featuresOnLayer = initialViewBox
+        ? sdkFeatures.filter(function (feature) {
+            const box = featureBbox(feature);
+            return !box || lmcBboxesIntersect(initialViewBox, box);
+          })
+        : sdkFeatures;
+      if (initialViewBox) {
+        const initialLayerIds = {};
+        featuresOnLayer.forEach(function (feature) {
+          initialLayerIds[feature.id] = true;
+        });
+        lmcLayerWindows[layerName] = { box: initialViewBox.slice(), ids: initialLayerIds };
+      } else {
+        delete lmcLayerWindows[layerName];
+      }
+      if (featuresOnLayer.length > 0) {
+        wmeSDK.Map.dangerouslyAddFeaturesToLayerWithoutValidation({ features: featuresOnLayer, layerName: layerName });
+      }
       wmeSDK.Map.setLayerVisibility({ layerName: layerName, visibility: true });
-      console.log(`${scriptName}: Added ${sdkFeatures.length} features to SDK layer ${layerName}`);
+      console.log(`${scriptName}: Added ${featuresOnLayer.length} of ${sdkFeatures.length} features to SDK layer ${layerName}`);
 
       // z-index based on layer type - boundaries below buildings
       wmeSDK.Map.setLayerZIndex({
@@ -4286,6 +4475,14 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
   unsafeWindow.SDK_INITIALIZED.then(bootstrap);
   /*
 changeLog
+2026.09.14.005
+<strong>Added - "Only put the current view on the map" (Lalitpur HN Address Wards):</strong><br>
+- A loaded ward now puts only the features inside the map view on its layer, rather than every feature of the ward. The view is padded by 50% (<code>LMC_WINDOW_PADDING</code>, the same margin the ward eviction test uses), so nothing pops in at the edge.<br>
+- The window follows the padded-viewport + retain model WME uses for its own map objects: while the view stays inside the already loaded window nothing is touched; when you pan to a new area the layer is topped up with the features that entered and the ones that left are removed (<code>Map.removeFeaturesFromLayer</code> + <code>dangerouslyAddFeaturesToLayerWithoutValidation</code>, one batched call each).<br>
+- The ward itself is still fetched once and kept whole in memory (<code>loadedGeoJSONLayers[].sdkFeatures</code>), so panning never re-downloads and shifting/styling keep working on the complete set.<br>
+- Every feature now carries a precomputed bbox (<code>properties.__bbox</code>), which makes re-windowing a four-number compare per feature. The bbox is translated with the coordinates when a layer is shifted, and the shift/reset paths re-window instead of re-adding every feature.<br>
+- New switch <em>Only put the current view on the map</em> in the ward group card (on by default, remembered in <code>localStorage._wme_nepali_wms_lmc_auto</code>). Turning it off immediately puts the whole loaded ward back on the map.<br>
+- <em>Clear auto-loaded layers</em>, unticking a ward, eviction and the Style Settings card are unaffected; the window bookkeeping is dropped with the layer.<br><br>
 2026.09.14.004
 <strong>Changed - Style Settings defaults:</strong><br>
 - The default feature-layer style now reproduces the previous LMC ward GeoJSON look instead of the neutral WME GeoFile blue: stroke <code>#FF5722</code> (orange), line width 2 px at 80% opacity, label size 13 px with white text and a black outline, centred on the feature (OL2 <code>labelAlign: cm</code>).<br>
