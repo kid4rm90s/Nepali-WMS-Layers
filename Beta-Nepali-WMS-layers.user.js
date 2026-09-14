@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name          Beta - Nepali WMS layers
-// @version       2026.09.13.016
+// @version       2026.09.14.004
 // @author        kid4rm90s
 // @description   Displays layers from Nepali WMS services in WME
 // @include      /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor.*$/
@@ -38,7 +38,7 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
 (function main() {
   ('use strict');
   const updateMessage =
-'<strong>Added HNs:</strong><br>- Dhangadhi Sub Metropolitan City <br>- Ghodaghodi Municipality <br>- Nepalgunj Sub Metropolitan City<br><br>';
+'<strong>Changed:</strong><br>- The feature-layer style defaults now match the previous LMC ward GeoJSON look: an orange (<code>#FF5722</code>) outline, 2 px at 80% opacity, <strong>no polygon fill</strong>, and white 13 px labels with a black outline centred on the feature. Ward addresses and ward boundaries share those defaults (boundaries stay unlabelled) - use the per-layer override in Settings to give one of them its own colour.<br>- Fill Opacity defaults to <strong>0</strong>, so ward polygons are outlines only; raise the slider when a filled area is wanted. A previously saved global style or layer override still wins over these defaults - press <em>Reset to defaults</em> to pick them up.<br><br>';
   const scriptName = GM_info.script.name;
   const scriptVersion = GM_info.script.version;
   const downloadUrl = 'https://greasyfork.org/scripts/521924-nepali-wms-layers/code/nepali-wms-layers.user.js';
@@ -404,71 +404,868 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
     return 27.7;
   }
 
-  // Helper: update GeoJSON layer selector dropdown
+  // Helper: refresh the shared shift dropdown of the "Layer tools" card.
+  // That dropdown is the single place the shift pad reads its target from, and it
+  // lists the loaded GeoJSON layers too, so it has to be rebuilt whenever one is
+  // added or cleared (see fillWMSLayersSelectList).
   function updateGeoJsonLayerSelector() {
-    const select = document.getElementById('geoJsonLayerSelect');
-    if (!select) return;
+    fillWMSLayersSelectList();
+    fillStyleScopeSelect();
+  }
 
-    // Clear existing options except first (default)
-    while (select.options.length > 1) {
-      select.remove(1);
+  // The shared shift dropdown carries the layer KIND in its value, so one pad can
+  // drive both engines: "wms:<toggler key>" or "geojson:<layer name>".
+  // Returns null while nothing is selectable (no layer loaded yet).
+  function selectedShiftTarget() {
+    var select = document.getElementById('WMSLayersSelect');
+    var raw = select ? select.value : '';
+    if (!raw) return null;
+    var sep = raw.indexOf(':');
+    if (sep === -1) return null;
+    return { type: raw.slice(0, sep), name: raw.slice(sep + 1) };
+  }
+
+  // The WMS togglers that currently have one of their OL2 layers on the map, with the
+  // toggler key. The dropdown is keyed by TOGGLER, never by the OL2 layer name: a
+  // toggler can own several layers and addLayerToggler() gives those " 0"/" 1" name
+  // suffixes, and the layer's params are not a reliable way to recognise a WMS layer.
+  function wmsTogglersOnMap() {
+    var attached = [];
+    try {
+      attached = W.map.getLayers();
+    } catch (e) {
+      attached = [];
     }
-
-    // Add options for each loaded layer
-    loadedGeoJSONLayers.forEach(layerInfo => {
-      const option = document.createElement('option');
-      option.value = layerInfo.name;
-      option.textContent = layerInfo.name;
-      select.appendChild(option);
-    });
-
-    // Reset to default if no layers
-    if (loadedGeoJSONLayers.length === 0) {
-      select.selectedIndex = 0;
+    var list = [];
+    for (var key in WMSLayerTogglers) {
+      var toggler = WMSLayerTogglers[key];
+      if (!toggler || toggler.serviceType !== 'WMS') continue;
+      var isOnMap = toggler.layerArray.some(function (item) {
+        return !!item.layer && attached.indexOf(item.layer) !== -1;
+      });
+      if (isOnMap) list.push({ key: key, toggler: toggler });
     }
+    return list;
+  }
+
+  // The OL2 layers of one toggler that are currently on the map - the same set its
+  // checkbox controls. Resolved by object identity so no name matching is involved.
+  function findWmsLayersForTarget(togglerKey) {
+    var toggler = WMSLayerTogglers[togglerKey];
+    if (!toggler) return [];
+    var attached = [];
+    try {
+      attached = W.map.getLayers();
+    } catch (e) {
+      attached = [];
+    }
+    return toggler.layerArray
+      .map(function (item) {
+        return item.layer;
+      })
+      .filter(function (layer) {
+        return !!layer && attached.indexOf(layer) !== -1;
+      });
   }
 
   /* ------------------------------------------------------------------
-     GeoJSON layers (LMC ward buildings / ward boundaries) - SDK feature layers.
+     Feature layers (LMC ward addresses / ward boundaries today; future KML, KMZ,
+     GML, GPX, WKT or ZIP(SHP) imports later) - SDK feature layers.
      Replaces OL.Format.GeoJSON + OL.Layer.Vector + OL.StyleMap: the SDK's
-     FeatureStyle is the OL2 style key list, so the old styles are declared as
-     style rules instead. Labels are read through styleContext getters, which is
-     what lets the label colour/size inputs re-render a loaded layer through
-     redrawLayer() without reloading the ward.
+     FeatureStyle is the OL2 style key list, so the styles are declared as style
+     rules instead. Every value is read through a styleContext getter, which is what
+     lets the Style Settings card restyle an already loaded layer with redrawLayer()
+     without ever removing or re-adding a feature.
      ------------------------------------------------------------------ */
-  var geoJsonLabelStyle = { fontColor: '#ffffff', fontSize: '13' };
 
-  var GEOJSON_LAYER_STYLES = {
-    buildings: {
-      stroke: true,
-      strokeColor: '#FF5722',
-      strokeWidth: 2,
-      strokeOpacity: 0.8,
-      fill: true,
-      fillColor: '#FF5722',
-      fillOpacity: 0.01,
-      pointRadius: 4,
-      label: '${getLabel}',
-      labelAlign: 'cm',
-      labelOutlineColor: '#000000',
-      labelOutlineWidth: 3,
-      fontSize: '${getFontSize}',
-      fontWeight: 'bold',
-      fontFamily: 'inherit',
-      fontColor: '${getFontColor}',
-    },
-    boundary: {
-      stroke: true,
-      strokeColor: '#FF0000',
-      strokeWidth: 3,
-      strokeOpacity: 0.9,
-      fill: true,
-      fillColor: '#FF0000',
-      fillOpacity: 0.05,
-      pointRadius: 4,
-      label: '',
-    },
+  // The values a feature layer uses when neither a per-layer override nor the global
+  // style says otherwise. Same shape as the stored records, so the whole object can
+  // be copied in and out of IndexedDB unchanged.
+  //
+  // These reproduce the look the LMC ward layers had before the Style Settings card
+  // existed: an orange (#FF5722) outline, 2 px wide at 80% opacity, NO polygon fill,
+  // and white 13 px labels with a black outline centred on the feature (labelAlign 'cm').
+  var FEATURE_STYLE_DEFAULTS = {
+    strokeColor: '#FF5722',      // line + polygon outline colour
+    lineOpacity: 0.8,            // stroke opacity, 0-1
+    lineSize: 2,                 // stroke width in px
+    lineStyle: 'solid',          // 'solid' | 'dash' | 'dot'
+    fillOpacity: 0,              // polygon fill opacity, 0-1 (0 = outlines only)
+    fontSize: 13,                // label size in px (also the point radius)
+    labelColorSync: false,       // true = label text uses the stroke colour
+    labelColor: '#ffffff',       // used when labelColorSync is false
+    outlineColorSync: false,     // true = label outline uses the stroke colour
+    outlineColor: '#000000',     // used when outlineColorSync is false
+    outlineWidthRelative: true,  // true = outline width is fontSize / 4
+    outlineWidth: 3,             // used when outlineWidthRelative is false
+    labelPos: 'cm',              // horizontal (l|c|r) + vertical (t|m|b) = OL2 labelAlign
   };
+
+  // Per-type structure - the only thing that differs between layer kinds. Every style
+  // value comes from the Style Settings card, so one global style can drive them all.
+  var LAYER_TYPE_TRAITS = {
+    buildings: { labelled: true, boldLabel: true },  // ward addresses, labelled
+    boundary: { labelled: false, boldLabel: false }, // ward outline, unlabelled
+  };
+
+  var STYLE_DB_NAME = 'NepaliWMSFeatureStyles';
+  var STYLE_DB_VERSION = 1;
+  var STYLE_DB_STORE = 'styles';
+  var STYLE_LAYER_KEY_PREFIX = 'layer:';
+  var LMC_BBOX_RECORD_KEY = 'lmc-ward-bboxes';
+
+  // Mirror of the IndexedDB records: { global: style|null, overrides: { name: style } }.
+  // Loaded once during init() so no layer is ever created without its style.
+  var featureStyleStore = { global: null, overrides: {} };
+  // layerName -> the mutable object the styleContext getters of that layer close over.
+  // Writing into it + redrawLayer() restyles the layer without touching its features.
+  var layerStyleStates = {};
+  var _styleDbPromise = null;
+  var _styleApplyTimer = null;
+
+  // --- IndexedDB: one 'styles' store holding the global style, the per-layer
+  //     overrides and the cached LMC ward bounding boxes ---
+  function openStyleDb() {
+    if (_styleDbPromise) return _styleDbPromise;
+    _styleDbPromise = new Promise(function (resolve, reject) {
+      var request;
+      try {
+        request = indexedDB.open(STYLE_DB_NAME, STYLE_DB_VERSION);
+      } catch (e) {
+        reject(e);
+        return;
+      }
+      request.onupgradeneeded = function (event) {
+        var db = event.target.result;
+        if (!db.objectStoreNames.contains(STYLE_DB_STORE)) {
+          db.createObjectStore(STYLE_DB_STORE, { keyPath: 'key' });
+        }
+      };
+      request.onsuccess = function (event) {
+        resolve(event.target.result);
+      };
+      request.onerror = function () {
+        reject(request.error);
+      };
+    }).catch(function (e) {
+      console.warn(scriptName + ': IndexedDB is unavailable, styles and the ward index will not persist.', e);
+      _styleDbPromise = null;
+      return null;
+    });
+    return _styleDbPromise;
+  }
+
+  // Runs one transaction and resolves with whatever the request returned. Resolves
+  // with null when IndexedDB is unavailable, so every caller keeps working without
+  // persistence instead of breaking.
+  function styleDbRequest(mode, run) {
+    return openStyleDb()
+      .then(function (db) {
+        if (!db) return null;
+        return new Promise(function (resolve, reject) {
+          var tx;
+          try {
+            tx = db.transaction([STYLE_DB_STORE], mode);
+          } catch (e) {
+            reject(e);
+            return;
+          }
+          var store = tx.objectStore(STYLE_DB_STORE);
+          var result = null;
+          var request = run(store);
+          if (request) {
+            request.onsuccess = function () {
+              result = request.result;
+            };
+            request.onerror = function () {
+              reject(request.error);
+            };
+          }
+          tx.oncomplete = function () {
+            resolve(result);
+          };
+          tx.onerror = function () {
+            reject(tx.error);
+          };
+          tx.onabort = function () {
+            reject(tx.error);
+          };
+        });
+      })
+      .catch(function (e) {
+        console.warn(scriptName + ': style storage request failed', e);
+        return null;
+      });
+  }
+
+  function styleDbGet(key) {
+    return styleDbRequest('readonly', function (store) {
+      return store.get(key);
+    });
+  }
+
+  function styleDbPut(key, value) {
+    return styleDbRequest('readwrite', function (store) {
+      return store.put({ key: key, style: value });
+    });
+  }
+
+  function styleDbDelete(key) {
+    return styleDbRequest('readwrite', function (store) {
+      return store.delete(key);
+    });
+  }
+
+  // Reads the global style and every per-layer override into the in-memory mirror.
+  // Called from init() before the panel - and therefore before any layer - is built.
+  async function loadFeatureStyles() {
+    var records = await styleDbRequest('readonly', function (store) {
+      return store.getAll();
+    });
+    if (!Array.isArray(records)) return;
+    records.forEach(function (record) {
+      if (!record || !record.key) return;
+      if (record.key === 'global') {
+        featureStyleStore.global = record.style || null;
+      } else if (record.key.indexOf(STYLE_LAYER_KEY_PREFIX) === 0) {
+        featureStyleStore.overrides[record.key.slice(STYLE_LAYER_KEY_PREFIX.length)] = record.style || {};
+      }
+    });
+    var overrideCount = Object.keys(featureStyleStore.overrides).length;
+    console.log(scriptName + ': style settings loaded (' + overrideCount + ' layer override(s)).');
+  }
+
+  // --- Style resolution ---------------------------------------------------
+  // The raw values of a layer: its override when it has one, otherwise the global
+  // style, with the defaults filling any gap. The card uses these so the stored
+  // sentinels ("match stroke") stay visible as switches.
+  function rawStyleValues(layerName) {
+    var source = (layerName && featureStyleStore.overrides[layerName]) || featureStyleStore.global || {};
+    var values = {};
+    Object.keys(FEATURE_STYLE_DEFAULTS).forEach(function (key) {
+      var value = source[key];
+      values[key] = value === undefined || value === null ? FEATURE_STYLE_DEFAULTS[key] : value;
+    });
+    return values;
+  }
+
+  // The values the styleContext getters report: the sentinels are resolved here, so
+  // "match stroke" and "relative to font size" need no branching at render time.
+  function resolveStyleValues(raw) {
+    var values = {};
+    Object.keys(FEATURE_STYLE_DEFAULTS).forEach(function (key) {
+      values[key] = raw[key] === undefined || raw[key] === null ? FEATURE_STYLE_DEFAULTS[key] : raw[key];
+    });
+    values.fontSize = Number(values.fontSize) || FEATURE_STYLE_DEFAULTS.fontSize;
+    values.lineSize = Number(values.lineSize) || 0;
+    values.lineOpacity = Math.max(0, Math.min(1, Number(values.lineOpacity)));
+    values.fillOpacity = Math.max(0, Math.min(1, Number(values.fillOpacity)));
+    values.labelColor = values.labelColorSync ? values.strokeColor : values.labelColor;
+    values.outlineColor = values.outlineColorSync ? values.strokeColor : values.outlineColor;
+    values.outlineWidthValue = values.outlineWidthRelative
+      ? values.fontSize / 4
+      : Number(values.outlineWidth) || 0;
+    return values;
+  }
+
+  // Pushes resolved values into the mutable state object of a layer, keeping the
+  // object identity its getters closed over.
+  function writeLayerStyleState(layerName, values) {
+    if (!layerStyleStates[layerName]) layerStyleStates[layerName] = {};
+    var state = layerStyleStates[layerName];
+    Object.keys(values).forEach(function (key) {
+      state[key] = values[key];
+    });
+    return state;
+  }
+
+  // styleContext for one layer. The SDK re-calls these getters on every render pass,
+  // which is what makes redrawLayer() enough to restyle a loaded layer.
+  function buildLayerStyleContext(layerName, layerType) {
+    var state = layerStyleStates[layerName];
+    var traits = LAYER_TYPE_TRAITS[layerType] || LAYER_TYPE_TRAITS.buildings;
+    return {
+      getLabel: function (context) {
+        if (!traits.labelled) return '';
+        return (context && context.feature && context.feature.properties && context.feature.properties.custom_label) || '';
+      },
+      getStroke: function () { return state.strokeColor; },
+      getLineOpacity: function () { return state.lineOpacity; },
+      getLineSize: function () { return state.lineSize; },
+      getLineStyle: function () { return state.lineStyle; },
+      getFillOpacity: function () { return state.fillOpacity; },
+      getFontSize: function () { return state.fontSize + 'px'; },
+      getFontColor: function () { return state.labelColor; },
+      getLabelOutlineColor: function () { return state.outlineColor; },
+      getLabelOutlineWidth: function () { return state.outlineWidthValue; },
+      getLabelAlign: function () { return state.labelPos; },
+    };
+  }
+
+  // The style rules themselves: structure lives here, every value comes from the
+  // getters above. pointRadius follows the label size, the way WME GeoFile does it.
+  function buildLayerStyleRules(layerType) {
+    var traits = LAYER_TYPE_TRAITS[layerType] || LAYER_TYPE_TRAITS.buildings;
+    return [
+      {
+        style: {
+          stroke: true,
+          strokeColor: '${getStroke}',
+          strokeOpacity: '${getLineOpacity}',
+          strokeWidth: '${getLineSize}',
+          strokeDashstyle: '${getLineStyle}',
+          fill: true,
+          fillColor: '${getStroke}',
+          fillOpacity: '${getFillOpacity}',
+          pointRadius: '${getFontSize}',
+          fontSize: '${getFontSize}',
+          fontColor: '${getFontColor}',
+          fontWeight: traits.boldLabel ? 'bold' : 'normal',
+          fontFamily: 'inherit',
+          label: traits.labelled ? '${getLabel}' : '',
+          labelAlign: '${getLabelAlign}',
+          labelOutlineColor: '${getLabelOutlineColor}',
+          labelOutlineWidth: '${getLabelOutlineWidth}',
+        },
+      },
+    ];
+  }
+
+  // Restyles the loaded layers from their (possibly just changed) style. Debounced, so
+  // dragging a slider through 50 values still redraws once.
+  function scheduleStyleApply(onlyLayerName) {
+    clearTimeout(_styleApplyTimer);
+    _styleApplyTimer = setTimeout(function () {
+      applyStyleToLoadedLayers(onlyLayerName);
+    }, 200);
+  }
+
+  function applyStyleToLoadedLayers(onlyLayerName) {
+    var refreshed = 0;
+    loadedGeoJSONLayers.forEach(function (info) {
+      if (onlyLayerName && info.name !== onlyLayerName) return;
+      if (!layerStyleStates[info.name]) return;
+      writeLayerStyleState(info.name, resolveStyleValues(rawStyleValues(info.name)));
+      try {
+        wmeSDK.Map.redrawLayer({ layerName: info.name });
+        refreshed++;
+      } catch (e) {
+        console.warn(scriptName + ': could not restyle layer ' + info.name, e);
+      }
+    });
+    return refreshed;
+  }
+
+  // Persists the global style / a layer override and restyles what is on the map.
+  function saveGlobalFeatureStyle(style) {
+    featureStyleStore.global = style;
+    styleDbPut('global', style);
+    scheduleStyleApply();
+  }
+
+  function saveLayerFeatureStyle(layerName, style) {
+    if (!layerName) return;
+    featureStyleStore.overrides[layerName] = style;
+    styleDbPut(STYLE_LAYER_KEY_PREFIX + layerName, style);
+    scheduleStyleApply(layerName);
+  }
+
+  function clearLayerFeatureStyle(layerName) {
+    if (!layerName) return;
+    delete featureStyleStore.overrides[layerName];
+    styleDbDelete(STYLE_LAYER_KEY_PREFIX + layerName);
+    scheduleStyleApply(layerName);
+  }
+
+  function clearGlobalFeatureStyle() {
+    featureStyleStore.global = null;
+    styleDbDelete('global');
+    scheduleStyleApply();
+  }
+
+  // Fills the Style Settings scope dropdown ("All layers (global)" + one entry per
+  // loaded feature layer). Safe to call while the panel does not exist yet.
+  function fillStyleScopeSelect() {
+    var select = document.getElementById('npwStyleScope');
+    if (!select) return;
+    var previous = select.value || 'global';
+    select.innerHTML = '';
+    var globalOption = document.createElement('option');
+    globalOption.value = 'global';
+    globalOption.textContent = 'All layers (global)';
+    select.appendChild(globalOption);
+    loadedGeoJSONLayers.forEach(function (info) {
+      var option = document.createElement('option');
+      option.value = STYLE_LAYER_KEY_PREFIX + info.name;
+      option.textContent = info.name;
+      select.appendChild(option);
+    });
+    if (select.querySelector('option[value="' + previous + '"]')) {
+      select.value = previous;
+    }
+    // Let the panel repopulate the controls for the scope that is now selected.
+    select.dispatchEvent(new Event('change'));
+  }
+
+  /* ------------------------------------------------------------------
+     "Lalitpur HN Address Wards" - viewport auto-loader
+     Ported from the WME GeoFile KML loader: only the wards whose bounding box
+     intersects the current viewport are fetched, off-screen layers are dropped again
+     (padded viewport + grace period) and every pass is debounced, so panning does not
+     hammer geonep.com.np.
+
+     The LMC endpoints are per-ward and carry no bbox, so each ward's bbox is derived
+     once from its boundary file and cached in IndexedDB - after that, a reload needs
+     no boundary request at all.
+     ------------------------------------------------------------------ */
+  var LMC_WARD_COUNT = 29;
+  var LMC_MIN_ZOOM = 11;          // auto-load is skipped below this zoom level
+  var LMC_DEBOUNCE_MS = 400;      // debounce applied to wme-map-move-end
+  var LMC_FETCH_CONCURRENCY = 4;  // parallel ward downloads per batch
+  var LMC_MAX_LAYERS = 60;        // hard cap on the number of viewport layers
+  var LMC_EVICT_PADDING = 0.5;    // keep a layer until it is 50% of a viewport clear
+  var LMC_EVICT_GRACE_MS = 8000;  // ...and only once it has been out of range this long
+  var LMC_BUILDING_URL = 'https://geonep.com.np/LMC/ajax/x_building.php?ward_no=';
+  var LMC_BOUNDARY_URL = 'https://geonep.com.np/LMC/ajax/x_ward_bnd.php?ward_no=';
+  var LMC_AUTO_STORAGE_KEY = '_wme_nepali_wms_lmc_auto';
+
+  var lmcAutoEnabled = false;      // master switch of the ward group
+  var lmcAutoRemoveEnabled = true; // drop layers that leave the padded viewport
+  var lmcEnabledWards = {};        // ward number -> true (ticked in the group card)
+  var lmcWardBboxes = null;        // ward number -> [minLon, minLat, maxLon, maxLat]
+  var lmcActiveLayers = new Map(); // layer name -> { ward, kind, bbox, lastSeen }
+  var lmcDebounceTimer = null;
+  var lmcEvictTimer = null;        // follow-up pass once a pending eviction's grace ends
+  var lmcUpdateInFlight = false;
+  var lmcBboxBuildPromise = null;
+
+  /** Standard bbox overlap test in [minLon, minLat, maxLon, maxLat] order. */
+  function lmcBboxesIntersect(a, b) {
+    return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
+  }
+
+  function lmcUnionBbox(a, b) {
+    return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
+  }
+
+  /** Grows a bbox by a fraction of its own width/height on every side. */
+  function lmcPadBbox(box, fraction) {
+    var dx = (box[2] - box[0]) * fraction;
+    var dy = (box[3] - box[1]) * fraction;
+    return [box[0] - dx, box[1] - dy, box[2] + dx, box[3] + dy];
+  }
+
+  /** Current viewport as a bbox array (null while the map has no extent yet). */
+  function lmcViewportBbox() {
+    try {
+      var extent = wmeSDK.Map.getMapExtent();
+      if (!extent || extent.length !== 4) return null;
+      return [extent[0], extent[1], extent[2], extent[3]];
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Bounding box of any GeoJSON coordinate nesting (Point/Line/Polygon/Multi*). */
+  function lmcBboxOfCoordinates(coordinates) {
+    var box = null;
+    (function walk(node) {
+      if (!node || node.length === 0) return;
+      if (typeof node[0] === 'number') {
+        var lon = Number(node[0]);
+        var lat = Number(node[1]);
+        if (!isFinite(lon) || !isFinite(lat)) return;
+        box = box
+          ? [Math.min(box[0], lon), Math.min(box[1], lat), Math.max(box[2], lon), Math.max(box[3], lat)]
+          : [lon, lat, lon, lat];
+        return;
+      }
+      for (var i = 0; i < node.length; i++) walk(node[i]);
+    })(coordinates);
+    return box;
+  }
+
+  function lmcBboxOfFeatures(features) {
+    var box = null;
+    (features || []).forEach(function (feature) {
+      var featureBox = feature && feature.geometry ? lmcBboxOfCoordinates(feature.geometry.coordinates) : null;
+      if (featureBox) box = box ? lmcUnionBbox(box, featureBox) : featureBox;
+    });
+    return box;
+  }
+
+  /** GET + parse a GeoJSON endpoint through GM_xmlhttpRequest (no CORS limits). */
+  function fetchGeoJson(url, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: url,
+        headers: { Accept: 'application/json' },
+        timeout: timeoutMs || 30000,
+        onload: function (response) {
+          if (response.status < 200 || response.status >= 300) {
+            reject(new Error('HTTP ' + response.status));
+            return;
+          }
+          try {
+            resolve(JSON.parse(response.responseText));
+          } catch (e) {
+            reject(e);
+          }
+        },
+        onerror: function () {
+          reject(new Error('network error'));
+        },
+        ontimeout: function () {
+          reject(new Error('request timeout'));
+        },
+      });
+    });
+  }
+
+  function lmcLayerName(ward, kind) {
+    return kind === 'boundary' ? 'LMC_Ward_' + ward + '_Boundary' : 'LMC_Ward_' + ward + '_Buildings';
+  }
+
+  function setLmcStatus(text) {
+    var element = document.getElementById('lmcAutoStatus');
+    if (element) element.textContent = text;
+  }
+
+  /**
+   * Ensures a bbox is known for every ward, reading the IndexedDB cache first and
+   * deriving the missing ones from the ward boundary files (batched, one time only).
+   */
+  async function ensureLmcWardBboxes() {
+    if (lmcWardBboxes && Object.keys(lmcWardBboxes).length >= LMC_WARD_COUNT) return lmcWardBboxes;
+    if (lmcBboxBuildPromise) return lmcBboxBuildPromise;
+
+    lmcBboxBuildPromise = (async function build() {
+      if (!lmcWardBboxes) {
+        var cached = await styleDbGet(LMC_BBOX_RECORD_KEY);
+        lmcWardBboxes = (cached && cached.style) || {};
+      }
+
+      var missing = [];
+      for (var ward = 1; ward <= LMC_WARD_COUNT; ward++) {
+        if (!lmcWardBboxes[ward]) missing.push(ward);
+      }
+
+      if (missing.length > 0) {
+        console.log(scriptName + ': indexing ' + missing.length + ' LMC ward bbox(es) from the boundary service.');
+        for (var offset = 0; offset < missing.length; offset += LMC_FETCH_CONCURRENCY) {
+          var batch = missing.slice(offset, offset + LMC_FETCH_CONCURRENCY);
+          setLmcStatus('Building ward index (' + Math.min(offset + LMC_FETCH_CONCURRENCY, missing.length) + '/' + missing.length + ')…');
+          await Promise.all(batch.map(async function (ward) {
+            try {
+              var data = await fetchGeoJson(LMC_BOUNDARY_URL + ward);
+              var box = lmcBboxOfFeatures(data && data.features);
+              if (box) lmcWardBboxes[ward] = box;
+            } catch (e) {
+              console.warn(scriptName + ': could not index ward ' + ward, e);
+            }
+          }));
+        }
+        await styleDbPut(LMC_BBOX_RECORD_KEY, lmcWardBboxes);
+      }
+
+      lmcBboxBuildPromise = null;
+      return lmcWardBboxes;
+    })();
+
+    return lmcBboxBuildPromise;
+  }
+
+  /** Loads one ward's address points and boundary (skipping anything already loaded). */
+  async function addLmcWardLayers(ward) {
+    var box = (lmcWardBboxes && lmcWardBboxes[ward]) || null;
+    var added = 0;
+
+    for (var i = 0; i < 2; i++) {
+      var kind = i === 0 ? 'buildings' : 'boundary';
+      var layerName = lmcLayerName(ward, kind);
+
+      if (findGeoJsonLayer(layerName)) {
+        // Already on the map (loaded earlier, or by hand) - just track it.
+        if (!lmcActiveLayers.has(layerName)) {
+          lmcActiveLayers.set(layerName, { ward: ward, kind: kind, bbox: box, lastSeen: Date.now() });
+        }
+        continue;
+      }
+
+      try {
+        var url = (kind === 'buildings' ? LMC_BUILDING_URL : LMC_BOUNDARY_URL) + ward;
+        var data = await fetchGeoJson(url);
+        if (!data || !data.features || data.features.length === 0) {
+          console.warn(scriptName + ': ward ' + ward + ' ' + kind + ' returned no features.');
+          continue;
+        }
+        createGeoJSONLayer(data, layerName, ward, kind);
+        lmcActiveLayers.set(layerName, { ward: ward, kind: kind, bbox: box, lastSeen: Date.now() });
+        added++;
+      } catch (e) {
+        console.warn(scriptName + ': could not load ward ' + ward + ' ' + kind, e);
+      }
+    }
+
+    return added;
+  }
+
+  /** Removes one feature layer from the map and from every piece of bookkeeping. */
+  async function removeLmcLayer(layerName) {
+    if (findGeoJsonLayer(layerName)) {
+      try {
+        wmeSDK.Map.removeAllFeaturesFromLayer({ layerName: layerName });
+      } catch (e) {
+        // Already gone - the removeLayer below is enough.
+      }
+      try {
+        wmeSDK.Map.removeLayer({ layerName: layerName });
+      } catch (e) {
+        if (!(wmeSDK.Errors && e instanceof wmeSDK.Errors.InvalidStateError)) {
+          console.warn(scriptName + ': could not remove layer ' + layerName, e);
+        }
+      }
+      loadedGeoJSONLayers = loadedGeoJSONLayers.filter(function (item) {
+        return item.name !== layerName;
+      });
+    }
+    lmcActiveLayers.delete(layerName);
+    delete layerStyleStates[layerName];
+    delete geoJsonLayerOffsets[layerName];
+    updateGeoJsonLayerSelector();
+  }
+
+  /**
+   * Drops auto-loaded layers that have left the viewport. Two guards stop this from
+   * thrashing while panning: a padded viewport (hysteresis) and a grace period, which
+   * also keeps a pan back instant. LMC_MAX_LAYERS stays as a hard cap.
+   */
+  async function pruneLmcLayers(viewport) {
+    if (!Array.isArray(viewport)) return 0;
+    var keep = lmcPadBbox(viewport, LMC_EVICT_PADDING);
+    var now = Date.now();
+    var removed = 0;
+
+    if (lmcAutoRemoveEnabled) {
+      var waiting = [];
+      var entries = Array.from(lmcActiveLayers.entries());
+      for (var i = 0; i < entries.length; i++) {
+        var layerName = entries[i][0];
+        var record = entries[i][1];
+        if (!Array.isArray(record.bbox)) continue; // no bbox to test - never evicted by position
+        if (lmcBboxesIntersect(keep, record.bbox)) {
+          record.lastSeen = now;
+          continue;
+        }
+        var idle = now - record.lastSeen;
+        if (idle >= LMC_EVICT_GRACE_MS) {
+          await removeLmcLayer(layerName);
+          removed++;
+        } else {
+          waiting.push(LMC_EVICT_GRACE_MS - idle);
+        }
+      }
+      // Nothing else would trigger another pass if the user stops panning now.
+      if (waiting.length > 0) scheduleLmcEvictionCheck(Math.min.apply(null, waiting) + 250);
+    }
+
+    // Hard cap safety net, always active.
+    var excess = lmcActiveLayers.size - LMC_MAX_LAYERS;
+    if (excess > 0) {
+      var oldestFirst = Array.from(lmcActiveLayers.entries()).sort(function (a, b) {
+        return a[1].lastSeen - b[1].lastSeen;
+      });
+      for (var j = 0; j < oldestFirst.length && excess > 0; j++) {
+        await removeLmcLayer(oldestFirst[j][0]);
+        removed++;
+        excess--;
+      }
+    }
+
+    return removed;
+  }
+
+  /** Master routine: fetch the ticked wards in view, then prune what has left it. */
+  async function updateLmcViewportLayers() {
+    if (!lmcAutoEnabled || lmcUpdateInFlight) return;
+    lmcUpdateInFlight = true;
+
+    var viewport = lmcViewportBbox();
+    try {
+      if (!viewport) {
+        setLmcStatus('Waiting for the map…');
+        return;
+      }
+
+      var zoom = 0;
+      try {
+        zoom = wmeSDK.Map.getZoomLevel();
+      } catch (e) {
+        zoom = LMC_MIN_ZOOM;
+      }
+      if (zoom < LMC_MIN_ZOOM) {
+        // Zoomed out: what is loaded is still in view, so leave it alone instead of
+        // churning it away and re-fetching on the way back in.
+        setLmcStatus('Zoom ' + zoom + ' — zoom in to ' + LMC_MIN_ZOOM + '+ to load wards');
+        return;
+      }
+
+      var ticked = Object.keys(lmcEnabledWards)
+        .map(Number)
+        .sort(function (a, b) {
+          return a - b;
+        });
+      if (ticked.length === 0) {
+        await pruneLmcLayers(viewport);
+        setLmcStatus('No ward ticked');
+        return;
+      }
+
+      var bboxes = await ensureLmcWardBboxes();
+      var wanted = ticked.filter(function (ward) {
+        var box = bboxes[ward];
+        return !box || lmcBboxesIntersect(viewport, box);
+      });
+
+      if (wanted.length === 0) {
+        var removed = await pruneLmcLayers(viewport);
+        setLmcStatus('No ticked ward in view' + (removed > 0 ? ' — removed ' + removed + ' layer(s)' : ''));
+        return;
+      }
+
+      setLmcStatus('Loading ward ' + wanted.join(', ') + '…');
+      var added = 0;
+      for (var offset = 0; offset < wanted.length; offset += LMC_FETCH_CONCURRENCY) {
+        var batch = wanted.slice(offset, offset + LMC_FETCH_CONCURRENCY);
+        var results = await Promise.all(batch.map(function (ward) {
+          return addLmcWardLayers(ward);
+        }));
+        added += results.reduce(function (total, value) {
+          return total + value;
+        }, 0);
+      }
+
+      var pruned = await pruneLmcLayers(viewport);
+      var summary = (added > 0 ? 'Added ' + added + ' layer(s)' : 'Up to date') + ' — ' + lmcActiveLayers.size + ' loaded';
+      if (pruned > 0) summary += ', removed ' + pruned;
+      setLmcStatus(summary);
+    } catch (e) {
+      console.error(scriptName + ': ward viewport update failed', e);
+      setLmcStatus('Error: ' + e.message);
+    } finally {
+      lmcUpdateInFlight = false;
+    }
+  }
+
+  /** Debounces viewport updates so rapid panning does not trigger repeated fetches. */
+  function scheduleLmcViewportUpdate() {
+    if (!lmcAutoEnabled) return;
+    clearTimeout(lmcDebounceTimer);
+    lmcDebounceTimer = setTimeout(function () {
+      updateLmcViewportLayers();
+    }, LMC_DEBOUNCE_MS);
+  }
+
+  /** Queues one follow-up pass so a layer inside its grace period still gets removed. */
+  function scheduleLmcEvictionCheck(delayMs) {
+    if (lmcEvictTimer) return; // a pass is already queued
+    lmcEvictTimer = setTimeout(function () {
+      lmcEvictTimer = null;
+      if (lmcAutoEnabled) updateLmcViewportLayers();
+    }, Math.max(delayMs, 250));
+  }
+
+  // --- Ward group state (localStorage: prefs, IndexedDB: data) ---
+  function loadLmcAutoState() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(LMC_AUTO_STORAGE_KEY) || '{}');
+      lmcAutoEnabled = !!saved.enabled;
+      lmcAutoRemoveEnabled = saved.autoRemove !== false;
+      lmcEnabledWards = {};
+      (saved.wards || []).forEach(function (ward) {
+        lmcEnabledWards[Number(ward)] = true;
+      });
+    } catch (e) {
+      console.warn(scriptName + ': could not read the ward group state', e);
+    }
+  }
+
+  function saveLmcAutoState() {
+    try {
+      localStorage.setItem(
+        LMC_AUTO_STORAGE_KEY,
+        JSON.stringify({
+          enabled: lmcAutoEnabled,
+          autoRemove: lmcAutoRemoveEnabled,
+          wards: Object.keys(lmcEnabledWards).map(Number),
+        })
+      );
+    } catch (e) {
+      // Ignore - a failed preference write must never break the script.
+    }
+  }
+
+  function setLmcAutoEnabled(enabled) {
+    lmcAutoEnabled = !!enabled;
+    saveLmcAutoState();
+    if (lmcAutoEnabled) {
+      setLmcStatus('Scanning viewport…');
+      scheduleLmcViewportUpdate();
+    } else {
+      setLmcStatus('Disabled');
+    }
+  }
+
+  function setLmcAutoRemoveEnabled(enabled) {
+    lmcAutoRemoveEnabled = !!enabled;
+    saveLmcAutoState();
+    if (lmcAutoEnabled) scheduleLmcViewportUpdate();
+  }
+
+  /** Ticking a ward queues it for loading; unticking removes its layers immediately. */
+  async function setLmcWardEnabled(ward, enabled) {
+    ward = Number(ward);
+    if (enabled) {
+      lmcEnabledWards[ward] = true;
+    } else {
+      delete lmcEnabledWards[ward];
+    }
+    saveLmcAutoState();
+
+    if (!enabled) {
+      var names = Array.from(lmcActiveLayers.entries())
+        .filter(function (entry) {
+          return entry[1].ward === ward;
+        })
+        .map(function (entry) {
+          return entry[0];
+        });
+      for (var i = 0; i < names.length; i++) {
+        await removeLmcLayer(names[i]);
+      }
+    }
+
+    if (lmcAutoEnabled) scheduleLmcViewportUpdate();
+    else if (!enabled) setLmcStatus('Ward ' + ward + ' layers removed');
+  }
+
+  /** Removes every loaded feature layer (the ward group's "Clear" button). */
+  async function clearLmcViewportLayers() {
+    // `loadedGeoJSONLayers` is the authoritative list - it also covers a layer that is
+    // no longer tracked in lmcActiveLayers (one loaded before the group was rebuilt),
+    // so nothing can be left behind on the map.
+    var names = loadedGeoJSONLayers.map(function (info) {
+      return info.name;
+    });
+    for (var i = 0; i < names.length; i++) {
+      await removeLmcLayer(names[i]);
+    }
+    setLmcStatus(names.length > 0 ? 'Cleared ' + names.length + ' layer(s)' : 'Nothing to clear');
+    if (names.length > 0) {
+      WazeToastr.Alerts.success(scriptName, 'Removed ' + names.length + ' layer(s)', false, false, 2000);
+    }
+  }
 
   function findGeoJsonLayer(layerName) {
     for (var i = 0; i < loadedGeoJSONLayers.length; i++) {
@@ -509,32 +1306,11 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
     }
   }
 
-  // Label colour/size are read by the styleContext getters on every render, so a
-  // change only needs a redraw of the building layers.
-  function applyGeoJsonLabelStyle(fontColor, fontSize) {
-    if (fontColor) geoJsonLabelStyle.fontColor = fontColor;
-    if (fontSize) geoJsonLabelStyle.fontSize = String(fontSize);
-    loadedGeoJSONLayers.forEach(function (info) {
-      if (info.layerType !== 'buildings') return;
-      try {
-        wmeSDK.Map.redrawLayer({ layerName: info.name });
-      } catch (e) {
-        console.warn(`${scriptName}: could not redraw layer ${info.name}`, e);
-      }
-    });
-  }
-
-  // Helper: shift GeoJSON layer
-  function shiftGeoJsonLayer(direction) {
-    const selectElem = document.getElementById('geoJsonLayerSelect');
-    const distInput = document.getElementById('geoJsonShiftDistance');
-    
-    if (!selectElem || !distInput) return;
-    
-    const layerName = selectElem.value;
-    const dist = parseFloat(distInput.value) || 0;
-    
-    if (!layerName || dist === 0) {
+  // Helper: shift a GeoJSON layer. `layerName` and `dist` come from the shared shift
+  // pad in the "Layer tools" card (the same pad also drives the WMS layers), which is
+  // why nothing is read from a dropdown here any more.
+  function shiftGeoJsonLayer(direction, layerName, dist) {
+    if (!layerName || !dist) {
       WazeToastr.Alerts.warning('Selection Required', 'Please select a layer and enter a shift distance.', false, false, 2000);
       return;
     }
@@ -562,20 +1338,25 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
       dy = 0; // metres, east / north
     const diag = dist * 0.7071; // sqrt(2)/2 for diagonal
 
-    // Direction convention (field-verified on the map): this table is the horizontal
-    // MIRROR of the WMS shiftLayer() table - dx is negated for left/right and for the
-    // diagonals, dy is not. The WMS pad shifts the request bbox (content moves the
-    // opposite way), this pad translates the features, so the two tables differ by
-    // design. Do not "correct" it back to the WMS negation without a fresh test.
+    // Direction convention. SDK features are stored as WGS84 degrees, so +dLon is
+    // EAST and +dLat is NORTH, and translating the coordinates moves the drawn
+    // content the same way the numbers move. The arrow must therefore move the
+    // CONTENTS in its own direction: "left" has to DECREASE the longitude.
+    // shiftLayer() (WMS) instead moves the requested BBOX, so its content travels the
+    // opposite way and its table is the exact negation of this one (both axes).
+    // History: this table was wrongly mirrored for a while (.019 and earlier, and in
+    // the pre-merge Nepali-WMS-Layers copy) - left/right plus all four diagonals sent
+    // the layer the wrong way. .020 fixed it, .021 restored the mirror by mistake and
+    // 2026.09.14.002 puts the correct signs back. Do not negate dx here.
     switch (direction) {
       case 'up': dy = dist; break;
       case 'down': dy = -dist; break;
-      case 'left': dx = dist; break;
-      case 'right': dx = -dist; break;
-      case 'upleft': dx = diag; dy = diag; break;
-      case 'upright': dx = -diag; dy = diag; break;
-      case 'downleft': dx = diag; dy = -diag; break;
-      case 'downright': dx = -diag; dy = -diag; break;
+      case 'left': dx = -dist; break;
+      case 'right': dx = dist; break;
+      case 'upleft': dx = -diag; dy = diag; break;
+      case 'upright': dx = diag; dy = diag; break;
+      case 'downleft': dx = -diag; dy = -diag; break;
+      case 'downright': dx = diag; dy = -diag; break;
     }
 
     const centerLat = getMapCenterLat();
@@ -606,12 +1387,8 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
     WazeToastr.Alerts.info('Layer Shifted', shiftMsg, false, false, 2000);
   }
 
-  // Helper: reset GeoJSON layer shift
-  function resetGeoJsonShift() {
-    const selectElem = document.getElementById('geoJsonLayerSelect');
-    if (!selectElem) return;
-
-    const layerName = selectElem.value;
+  // Helper: reset a GeoJSON layer's shift (same shared-pad call style as above).
+  function resetGeoJsonShift(layerName) {
     if (!layerName) {
       WazeToastr.Alerts.warning('Selection Required', 'Please select a layer to reset.', false, false, 2000);
       return;
@@ -666,6 +1443,11 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
       console.log(`${scriptName} initializing.`);
       W = unsafeWindow.W;
       OL = unsafeWindow.OpenLayers;
+
+      // Feature-layer style settings and the ward group's saved state are read before
+      // the panel (and therefore before any layer) is built.
+      await loadFeatureStyles();
+      loadLmcAutoState();
 
       WMSLayersTechSource.tileSizeG = new OL.Size(512, 512);
     WMSLayersTechSource.resolutions = [
@@ -1136,12 +1918,12 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
       }
       // Add close button and table styling
       popup.innerHTML = `
-        <a href="#" id="wms-info-popup-close" style="position:absolute;top:4px;right:8px;font-size:16px;text-decoration:none;color:#888;">&times;</a>
+        <a href="#" id="wms-info-popup-close" style="position:absolute;top:2px;right:4px;font-size:20px;text-decoration:none;color: #ff0000;">&times;</a>
         <style>
           #wms-info-popup table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 11px; }
           #wms-info-popup th, #wms-info-popup td { border: 1px solid var(--hairline, #ccc); padding: 2px 6px; text-align: left; font-size: 11px; }
           #wms-info-popup th { background: rgba(128, 128, 128, 0.18); font-weight: bold; font-size: 11px; }
-          #wms-info-popup tr.alert-success th { background: rgba(40, 167, 69, 0.25); text-align: center; font-size: 11px; }
+          #wms-info-popup tr.alert-success th { background: #8BC34A; color: #1b1b1b; font-weight: 700; text-align: center; font-size: 11px; }
         </style>
         ${html}
       `;
@@ -1181,12 +1963,12 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
       }
       // Add close button and table styling
       popup.innerHTML = `
-        <a href="#" id="${popupId}-close" style="position:absolute;top:4px;right:8px;font-size:16px;text-decoration:none;color:#888;">&times;</a>
+        <a href="#" id="${popupId}-close" style="position:absolute;top:2px;right:4px;font-size:20px;text-decoration:none;color: #ff0000;">&times;</a>
         <style>
           #${popupId} table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 11px; }
           #${popupId} th, #${popupId} td { border: 1px solid var(--hairline, #ccc); padding: 2px 6px; text-align: left; font-size: 11px; }
           #${popupId} th { background: rgba(128, 128, 128, 0.18); font-weight: bold; font-size: 11px; }
-          #${popupId} tr.alert-success th { background: rgba(40, 167, 69, 0.25); text-align: center; font-size: 11px; }
+          #${popupId} tr.alert-success th { background: #8BC34A; color: #1b1b1b; font-weight: 700; text-align: center; font-size: 11px; }
         </style>
         ${html}
       `;
@@ -1594,6 +2376,20 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
       return parts.length ? parts.join(', ') : 'none';
     }
 
+    // A GeoJSON layer's offset is stored in degrees, so it is converted back to metres
+    // for display - the shared pad then reports both layer kinds in the same unit.
+    function describeGeoJsonOffset(offset) {
+      if (!offset || (!offset.x && !offset.y)) return 'none';
+      var centerLat = getMapCenterLat();
+      var metersPerDegreeLon = (40075000 * Math.cos((centerLat * Math.PI) / 180)) / 360;
+      var east = offset.x * metersPerDegreeLon;
+      var north = offset.y * 111320;
+      var parts = [];
+      if (Math.round(east)) parts.push(Math.abs(Math.round(east)) + ' m ' + (east > 0 ? 'E' : 'W'));
+      if (Math.round(north)) parts.push(Math.abs(Math.round(north)) + ' m ' + (north > 0 ? 'N' : 'S'));
+      return parts.length ? parts.join(', ') : 'none';
+    }
+
     // Apply a shift to a layer and arm its getURL patch, so the correction is already
     // active when the layer is switched on and requests its first tile.
     function setWmsLayerOffset(layer, offset) {
@@ -1620,19 +2416,33 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
       saveStoredLayerOffsets(stored);
     }
 
-    // "Applied shift: 260 m W, 20 m N (built-in default)" next to the shift pad.
+    // "Applied shift: 260 m W, 20 m N (built-in default)" next to the shift pad. The
+    // pad is shared by both layer kinds, so the line describes whichever one is
+    // selected - WMS offsets come from the preset/remembered maps, GeoJSON offsets
+    // from the pad's own accumulated degrees.
     function refreshWmsShiftStatus() {
       var el = document.getElementById('WMSShiftStatus');
       if (!el) return;
-      var select = document.getElementById('WMSLayersSelect');
-      var name = select ? select.value : '';
-      if (!name || name === 'undefined') {
+      var target = selectedShiftTarget();
+      if (!target) {
         el.textContent = '';
         return;
       }
-      var offset = wmsLayerOffsets[name];
+      if (target.type === 'geojson') {
+        el.textContent = 'Applied shift: ' + describeGeoJsonOffset(geoJsonLayerOffsets[target.name]) + ' (GeoJSON layer)';
+        return;
+      }
+      // WMS offsets are keyed by OL2 layer name, so the toggler's on-map layer is the
+      // one whose shift this line reports (a toggler's layers share one offset).
+      var layers = findWmsLayersForTarget(target.name);
+      var wmsLayer = layers[0];
+      if (!wmsLayer) {
+        el.textContent = '';
+        return;
+      }
+      var offset = wmsLayerOffsets[wmsLayer.name];
       var isZero = !offset || (!offset.x && !offset.y);
-      var suffix = isZero ? '' : wmsSameOffset(wmsLayerPresetOffsets[name], offset) ? ' (built-in default)' : ' (remembered)';
+      var suffix = isZero ? '' : wmsSameOffset(wmsLayerPresetOffsets[wmsLayer.name], offset) ? ' (built-in default)' : ' (remembered)';
       el.textContent = 'Applied shift: ' + describeWmsOffset(offset) + suffix;
     }
 
@@ -1691,8 +2501,11 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
 
     injectWmsPanelStyles();
 
-    // The whole tab is a single panel: gradient header -> one card per layer group
-    // (opacity slider + checkbox per layer) -> layer tools -> GeoJSON tools.
+    // The panel is a gradient header, a sub-tab bar (Layers / Shifting / Settings)
+    // and the pane of the selected sub-tab. "Layers" holds the per-group cards
+    // (opacity slider + checkbox per layer) and the "Lalitpur HN Address Wards"
+    // viewport auto-loader; "Shifting" holds the layer tools (shift pad + per-layer
+    // opacity); "Settings" holds the feature-layer Style Settings.
     var panel = npwCreate('div', 'npw-panel');
     panel.id = 'nepali-wms-panel';
 
@@ -1706,15 +2519,315 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
     panel.appendChild(panelHeader);
     tabPane.appendChild(panel);
 
+    // --- Sub-tabs ---------------------------------------------------------
+    var tabs = npwTabs(panel, [
+      { id: 'layers', label: 'Layers', title: 'Show / hide the WMS layer groups' },
+      { id: 'shifting', label: 'Shifting', title: 'Shift a layer and adjust its opacity' },
+      { id: 'settings', label: 'Settings', title: 'Script settings' },
+    ]);
+    var layersPane = tabs.panes.layers;
+    var shiftingPane = tabs.panes.shifting;
+    var settingsPane = tabs.panes.settings;
+
+    // --- Settings tab: Style Settings (feature layers only) ------------------
+    // Ported from "WME GeoFile". One global style plus an optional per-layer
+    // override, persisted in IndexedDB, applied live (debounced redraw). WMS and XYZ
+    // layers are deliberately untouched - they have their own opacity control.
+    var styleCard = npwCard(settingsPane, 'Style Settings');
+    styleCard.appendChild(npwCreate('div', 'npw-status', 'Drives the loaded feature layers (GeoJSON today; KML, KMZ, GML, GPX, WKT, ZIP later). WMS and XYZ layers are not affected.'));
+
+    styleCard.appendChild(npwCreate('span', 'npw-small-label', 'Apply to:'));
+    var styleScopeSelect = document.createElement('select');
+    styleScopeSelect.id = 'npwStyleScope';
+    styleScopeSelect.className = 'npw-select';
+    styleCard.appendChild(styleScopeSelect);
+
+    // --- control factories --------------------------------------------------
+    function styleFieldRow(labelText) {
+      var row = npwCreate('div', 'npw-field-row');
+      row.appendChild(npwCreate('span', 'npw-field-label', labelText));
+      styleCard.appendChild(row);
+      return row;
+    }
+
+    function styleToggleBox(id, text, title) {
+      var wrap = npwCreate('label', 'npw-field-toggle');
+      wrap.title = title || text;
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.id = id;
+      box.className = 'npw-checkbox';
+      wrap.appendChild(box);
+      wrap.appendChild(document.createTextNode(text));
+      return { wrap: wrap, box: box };
+    }
+
+    function styleNumberInput(id, min, max, step) {
+      var input = document.createElement('input');
+      input.type = 'number';
+      input.id = id;
+      input.className = 'npw-number';
+      input.min = String(min);
+      input.max = String(max);
+      input.step = String(step);
+      return input;
+    }
+
+    function styleRangeControl(id, min, max, step, formatter) {
+      var input = document.createElement('input');
+      input.type = 'range';
+      input.id = id;
+      input.className = 'npw-opacity-slider';
+      input.min = String(min);
+      input.max = String(max);
+      input.step = String(step);
+      var valueEl = npwCreate('span', 'npw-opacity-value', '');
+      var readout = function () {
+        valueEl.textContent = formatter(parseFloat(input.value));
+      };
+      input.addEventListener('input', readout);
+      return { input: input, valueEl: valueEl, readout: readout };
+    }
+
+    // --- Stroke colour + label size ---
+    var strokeRow = styleFieldRow('Stroke Color');
+    var styleStrokeInput = document.createElement('input');
+    styleStrokeInput.type = 'color';
+    styleStrokeInput.id = 'npwStyleStroke';
+    styleStrokeInput.className = 'npw-color';
+    strokeRow.appendChild(styleStrokeInput);
+    strokeRow.appendChild(npwCreate('span', 'npw-field-label', 'Font Size'));
+    var fontSizeInput = styleNumberInput('npwStyleFontSize', 0, 40, 1);
+    strokeRow.appendChild(fontSizeInput);
+
+    // --- Label colour + "match stroke" ---
+    var labelRow = styleFieldRow('Label Color');
+    var styleLabelColorInput = document.createElement('input');
+    styleLabelColorInput.type = 'color';
+    styleLabelColorInput.id = 'npwStyleLabelColor';
+    styleLabelColorInput.className = 'npw-color';
+    labelRow.appendChild(styleLabelColorInput);
+    var labelSync = styleToggleBox('npwStyleLabelSync', 'Match stroke', 'Use the stroke colour for the label text');
+    labelRow.appendChild(labelSync.wrap);
+
+    // --- Outline colour + "match stroke" ---
+    var outlineRow = styleFieldRow('Outline Color');
+    var styleOutlineColorInput = document.createElement('input');
+    styleOutlineColorInput.type = 'color';
+    styleOutlineColorInput.id = 'npwStyleOutlineColor';
+    styleOutlineColorInput.className = 'npw-color';
+    outlineRow.appendChild(styleOutlineColorInput);
+    var outlineSync = styleToggleBox('npwStyleOutlineSync', 'Match stroke', 'Use the stroke colour for the label outline');
+    outlineRow.appendChild(outlineSync.wrap);
+
+    // --- Outline width + "relative to font size" ---
+    var outlineWidthRow = styleFieldRow('Outline Width');
+    var styleOutlineWidthInput = styleNumberInput('npwStyleOutlineWidth', 0, 20, 0.5);
+    outlineWidthRow.appendChild(styleOutlineWidthInput);
+    var outlineRelative = styleToggleBox('npwStyleOutlineRelative', 'Relative to font size', 'Calculate the outline width as font size / 4');
+    outlineWidthRow.appendChild(outlineRelative.wrap);
+
+    // --- Fill opacity ---
+    var fillRow = styleFieldRow('Fill Opacity');
+    var fillControl = styleRangeControl('npwStyleFillOpacity', 0, 1, 0.01, function (value) {
+      return Math.round(value * 100) + '%';
+    });
+    fillRow.appendChild(fillControl.input);
+    fillRow.appendChild(fillControl.valueEl);
+
+    // --- Line stroke: size ---
+    var lineSizeRow = styleFieldRow('Line Size');
+    var styleLineSizeInput = styleNumberInput('npwStyleLineSize', 0, 20, 0.5);
+    lineSizeRow.appendChild(styleLineSizeInput);
+
+    // --- Line stroke: style radios ---
+    var lineStyleRow = npwCreate('div', 'npw-radio-row');
+    lineStyleRow.appendChild(npwCreate('span', 'npw-field-label', 'Line Style'));
+    var lineStyleOptions = npwCreate('div', 'npw-radio-options');
+    var styleLineStyleRadios = [];
+    ['solid', 'dash', 'dot'].forEach(function (value) {
+      var option = npwCreate('label', 'npw-radio-option');
+      var radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'npwStyleLineStyle';
+      radio.value = value;
+      option.appendChild(radio);
+      option.appendChild(document.createTextNode(value.charAt(0).toUpperCase() + value.slice(1)));
+      lineStyleOptions.appendChild(option);
+      styleLineStyleRadios.push(radio);
+    });
+    lineStyleRow.appendChild(lineStyleOptions);
+    styleCard.appendChild(lineStyleRow);
+
+    // --- Line stroke: opacity ---
+    var lineOpacityRow = styleFieldRow('Line Opacity');
+    var lineOpacityControl = styleRangeControl('npwStyleLineOpacity', 0, 1, 0.05, function (value) {
+      return Math.round(value * 100) + '%';
+    });
+    lineOpacityRow.appendChild(lineOpacityControl.input);
+    lineOpacityRow.appendChild(lineOpacityControl.valueEl);
+
+    // --- Label position (horizontal + vertical = OL2 labelAlign) ---
+    var posRow = npwCreate('div', 'npw-radio-row');
+    posRow.appendChild(npwCreate('span', 'npw-field-label', 'Label Position'));
+    var posOptions = npwCreate('div', 'npw-radio-options');
+    var stylePosRadios = { h: [], v: [] };
+    [
+      ['h', [['l', 'Left'], ['c', 'Center'], ['r', 'Right']]],
+      ['v', [['t', 'Top'], ['m', 'Middle'], ['b', 'Bottom']]],
+    ].forEach(function (group) {
+      group[1].forEach(function (pair) {
+        var option = npwCreate('label', 'npw-radio-option');
+        var radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'npwStyleLabelPos' + group[0].toUpperCase();
+        radio.value = pair[0];
+        option.appendChild(radio);
+        option.appendChild(document.createTextNode(pair[1]));
+        posOptions.appendChild(option);
+        stylePosRadios[group[0]].push(radio);
+      });
+    });
+    posRow.appendChild(posOptions);
+    styleCard.appendChild(posRow);
+
+    var styleCardStatus = npwCreate('div', 'npw-status', '');
+    styleCard.appendChild(styleCardStatus);
+
+    var styleBtnRow = npwButtonRow(styleCard);
+    var styleResetGlobalBtn = npwButton(styleBtnRow, 'Reset to defaults', 'Reset the global style; per-layer overrides are kept', 'accent');
+    var styleResetLayerBtn = npwButton(styleBtnRow, 'Reset this layer', 'Drop this layer\'s override so it follows the global style again', 'neutral');
+
+    // The scope dropdown value is "global" or "layer:<layerName>".
+    function styleScopeLayerName() {
+      var value = styleScopeSelect.value || 'global';
+      return value.indexOf(STYLE_LAYER_KEY_PREFIX) === 0 ? value.slice(STYLE_LAYER_KEY_PREFIX.length) : null;
+    }
+
+    function readStyleControls() {
+      var style = {};
+      Object.keys(FEATURE_STYLE_DEFAULTS).forEach(function (key) {
+        style[key] = FEATURE_STYLE_DEFAULTS[key];
+      });
+      style.strokeColor = styleStrokeInput.value;
+      style.fontSize = Number(fontSizeInput.value) || FEATURE_STYLE_DEFAULTS.fontSize;
+      style.labelColorSync = labelSync.box.checked;
+      style.labelColor = styleLabelColorInput.value;
+      style.outlineColorSync = outlineSync.box.checked;
+      style.outlineColor = styleOutlineColorInput.value;
+      style.outlineWidthRelative = outlineRelative.box.checked;
+      style.outlineWidth = Number(styleOutlineWidthInput.value) || 0;
+      style.fillOpacity = parseFloat(fillControl.input.value);
+      style.lineSize = Number(styleLineSizeInput.value) || 0;
+      style.lineOpacity = parseFloat(lineOpacityControl.input.value);
+      var horizontal = stylePosRadios.h.filter(function (radio) { return radio.checked; })[0];
+      var vertical = stylePosRadios.v.filter(function (radio) { return radio.checked; })[0];
+      style.labelPos = (horizontal || stylePosRadios.h[1]).value + (vertical || stylePosRadios.v[1]).value;
+      var lineStyleRadio = styleLineStyleRadios.filter(function (radio) { return radio.checked; })[0];
+      style.lineStyle = lineStyleRadio ? lineStyleRadio.value : FEATURE_STYLE_DEFAULTS.lineStyle;
+      return style;
+    }
+
+    function populateStyleControls(style) {
+      styleStrokeInput.value = style.strokeColor;
+      fontSizeInput.value = String(style.fontSize);
+      labelSync.box.checked = !!style.labelColorSync;
+      styleLabelColorInput.value = style.labelColor;
+      styleLabelColorInput.disabled = !!style.labelColorSync;
+      outlineSync.box.checked = !!style.outlineColorSync;
+      styleOutlineColorInput.value = style.outlineColor;
+      styleOutlineColorInput.disabled = !!style.outlineColorSync;
+      outlineRelative.box.checked = !!style.outlineWidthRelative;
+      styleOutlineWidthInput.value = String(style.outlineWidth);
+      styleOutlineWidthInput.disabled = !!style.outlineWidthRelative;
+      fillControl.input.value = String(style.fillOpacity);
+      fillControl.readout();
+      styleLineSizeInput.value = String(style.lineSize);
+      lineOpacityControl.input.value = String(style.lineOpacity);
+      lineOpacityControl.readout();
+      styleLineStyleRadios.forEach(function (radio) {
+        radio.checked = radio.value === style.lineStyle;
+      });
+      stylePosRadios.h.forEach(function (radio) {
+        radio.checked = style.labelPos.charAt(0) === radio.value;
+      });
+      stylePosRadios.v.forEach(function (radio) {
+        radio.checked = style.labelPos.charAt(1) === radio.value;
+      });
+    }
+
+    function loadStyleScope() {
+      var layerName = styleScopeLayerName();
+      populateStyleControls(rawStyleValues(layerName));
+      styleResetLayerBtn.disabled = !layerName;
+      styleCardStatus.textContent = layerName
+        ? 'Editing the override for ' + layerName + '.'
+        : 'Editing the global style used by every feature layer without an override.';
+    }
+
+    function onStyleControlChange() {
+      var style = readStyleControls();
+      // Keep the dependent controls in step with their switches.
+      styleLabelColorInput.disabled = style.labelColorSync;
+      styleOutlineColorInput.disabled = style.outlineColorSync;
+      if (style.labelColorSync) {
+        style.labelColor = style.strokeColor;
+        styleLabelColorInput.value = style.strokeColor;
+      }
+      if (style.outlineColorSync) {
+        style.outlineColor = style.strokeColor;
+        styleOutlineColorInput.value = style.strokeColor;
+      }
+      styleOutlineWidthInput.disabled = style.outlineWidthRelative;
+      if (style.outlineWidthRelative) {
+        styleOutlineWidthInput.value = String(Number(style.fontSize) / 4);
+      }
+      var layerName = styleScopeLayerName();
+      if (layerName) saveLayerFeatureStyle(layerName, style);
+      else saveGlobalFeatureStyle(style);
+    }
+
+    [
+      styleStrokeInput, fontSizeInput, styleLabelColorInput, styleOutlineColorInput,
+      styleOutlineWidthInput, styleLineSizeInput, fillControl.input, lineOpacityControl.input,
+    ].forEach(function (control) {
+      control.addEventListener('input', onStyleControlChange);
+      control.addEventListener('change', onStyleControlChange);
+    });
+    [labelSync.box, outlineSync.box, outlineRelative.box]
+      .concat(styleLineStyleRadios, stylePosRadios.h, stylePosRadios.v)
+      .forEach(function (control) {
+        control.addEventListener('change', onStyleControlChange);
+      });
+
+    styleScopeSelect.addEventListener('change', loadStyleScope);
+    styleResetGlobalBtn.addEventListener('click', function () {
+      clearGlobalFeatureStyle();
+      loadStyleScope();
+      styleCardStatus.textContent = 'Global style reset to defaults.';
+    });
+    styleResetLayerBtn.addEventListener('click', function () {
+      var layerName = styleScopeLayerName();
+      if (!layerName) return;
+      clearLayerFeatureStyle(layerName);
+      loadStyleScope();
+      styleCardStatus.textContent = layerName + ' now follows the global style.';
+    });
+
+    fillStyleScopeSelect();
+    loadStyleScope();
+
     // One card per layer group, with the per-layer checkboxes.
-    buildLayerCategoryPanels(panel);
+    buildLayerCategoryPanels(layersPane);
     // Now that the checkboxes exist, push the stored state onto the OL2 layers.
     syncAllTogglerVisibility();
 
     // --- Layer tools: pick a layer for shifting / per-layer opacity ---
-    var section = npwCard(panel, 'Layer tools');
+    var section = npwCard(shiftingPane, 'Layer tools');
     section.id = 'WMS';
-    section.appendChild(npwCreate('span', 'npw-small-label', 'WMS layer (shift + opacity):'));
+    // One dropdown for both kinds of layer: the WMS layers on the map and the
+    // GeoJSON layers loaded from the "Layers" tab (see fillWMSLayersSelectList).
+    section.appendChild(npwCreate('span', 'npw-small-label', 'Layer to shift (WMS or GeoJSON, switched on):'));
     var WMSSelect = document.createElement('select');
     WMSSelect.id = 'WMSLayersSelect';
     WMSSelect.className = 'npw-select';
@@ -1748,10 +2861,10 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
     npwBuildShiftPad(
       shiftContainer,
       function (direction) {
-        shiftLayer(direction);
+        shiftSelectedLayer(direction);
       },
       function () {
-        resetWMSLayerShift();
+        resetSelectedLayerShift();
       }
     );
     section.appendChild(shiftContainer);
@@ -1778,23 +2891,23 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
       };
     }
 
-    // Helper to shift layer (now accepts dx, dy)
-    function shiftLayer(direction, customDx, customDy) {
-      var value = document.getElementById('WMSLayersSelect').value;
-      var dist = parseFloat(document.getElementById('WMSShiftDistance').value) || 0;
-      if (!value || value === 'undefined' || dist === 0) return;
-      var layer = W.map.getLayers().find(l => l.name === value) || null;
-      if (!layer) return;
-      patchWMSLayerGetURL(layer);
+    // Helper to shift a WMS layer. The pad passes the TOGGLER key (the dropdown value
+    // after "wms:"), and every layer of that toggler which is on the map is shifted -
+    // exactly the set its checkbox controls.
+    function shiftLayer(direction, togglerKey, dist) {
+      if (!togglerKey || !dist) return;
+      var layers = findWmsLayersForTarget(togglerKey);
+      if (!layers.length) {
+        // Never fail silently: an empty result is what made the pad look dead.
+        WazeToastr.Alerts.warning('Layer Not On Map', 'Switch the layer on first, then shift it.', false, false, 2500);
+        return;
+      }
       var map = W.map;
       var proj = map.getProjectionObject();
       var dx = 0,
         dy = 0;
       var diag = dist * 0.7071; // sqrt(2)/2 for diagonal
-      if (typeof customDx === 'number' && typeof customDy === 'number') {
-        dx = customDx;
-        dy = customDy;
-      } else if (proj && proj.projCode === 'EPSG:4326') {
+      if (proj && proj.projCode === 'EPSG:4326') {
         var centerLat = getMapCenterLat();
         var metersPerDegreeLat = 111320;
         var metersPerDegreeLon = (40075000 * Math.cos((centerLat * Math.PI) / 180)) / 360;
@@ -1860,195 +2973,199 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
             break;
         }
       }
-      if (!wmsLayerOffsets[layer.name]) wmsLayerOffsets[layer.name] = { x: 0, y: 0 };
-      wmsLayerOffsets[layer.name].x += dx;
-      wmsLayerOffsets[layer.name].y += dy;
-      // Store original offset if not already stored
-      if (!wmsLayerOriginalOffsets[layer.name]) {
-        wmsLayerOriginalOffsets[layer.name] = { x: 0, y: 0 };
-      }
-      // Remember the total shift of this layer, so the next page load starts from the
-      // corrected position instead of having to be nudged there again.
-      rememberWmsLayerOffset(layer.name);
+      // Apply the same step to every layer of the toggler, remembering each one so the
+      // correction survives a page reload.
+      layers.forEach(function (layer) {
+        patchWMSLayerGetURL(layer);
+        if (!wmsLayerOffsets[layer.name]) wmsLayerOffsets[layer.name] = { x: 0, y: 0 };
+        wmsLayerOffsets[layer.name].x += dx;
+        wmsLayerOffsets[layer.name].y += dy;
+        if (!wmsLayerOriginalOffsets[layer.name]) {
+          wmsLayerOriginalOffsets[layer.name] = { x: 0, y: 0 };
+        }
+        rememberWmsLayerOffset(layer.name);
+        layer.redraw();
+      });
       refreshWmsShiftStatus();
       // Show WazeToastr alert
       WazeToastr.Alerts.info('Layer Shifted', `Layer shifted to ${dist} metres ${direction}. Please wait for fully load.`, false, false, 2000);
-      layer.redraw();
     }
-    // Reset the shift of the layer selected above.
-    function resetWMSLayerShift() {
-      var value = document.getElementById('WMSLayersSelect').value;
-      if (!value || value === 'undefined') return;
-      var layer = W.map.getLayers().find(l => l.name === value) || null;
-      if (!layer) return;
-      patchWMSLayerGetURL(layer);
-      // Back to the layer's built-in default (its published position when it has none).
-      var preset = wmsLayerPresetOffsets[layer.name];
-      wmsLayerOffsets[layer.name] = preset ? { x: preset.x, y: preset.y } : { x: 0, y: 0 };
+    // Reset the shift of every on-map layer of the given toggler back to its built-in
+    // default (its published position when it has none).
+    function resetWMSLayerShift(togglerKey) {
+      if (!togglerKey) return;
+      var layers = findWmsLayersForTarget(togglerKey);
+      if (!layers.length) {
+        WazeToastr.Alerts.warning('Layer Not On Map', 'Switch the layer on first, then reset it.', false, false, 2500);
+        return;
+      }
       var stored = loadStoredLayerOffsets();
-      delete stored[layer.name];
+      var presetText = null;
+      layers.forEach(function (layer) {
+        patchWMSLayerGetURL(layer);
+        var preset = wmsLayerPresetOffsets[layer.name];
+        if (presetText === null && preset) presetText = describeWmsOffset(preset);
+        wmsLayerOffsets[layer.name] = preset ? { x: preset.x, y: preset.y } : { x: 0, y: 0 };
+        delete stored[layer.name];
+        layer.redraw();
+      });
       saveStoredLayerOffsets(stored);
       refreshWmsShiftStatus();
-      layer.redraw();
       // Show WazeToastr alert on reset
-      var resetMessage = preset
-        ? 'Layer shift reset to the built-in default (' + describeWmsOffset(preset) + ').'
+      var resetMessage = presetText
+        ? 'Layer shift reset to the built-in default (' + presetText + ').'
         : 'Layer shift has been reset to default.';
       WazeToastr.Alerts.info('Layer Reset', resetMessage, false, false, 2000);
     }
 
-
-    // --- GeoJSON URL Loading Section ---
-    var geoJsonSection = npwCard(panel, 'Load GeoJSON from URL');
-    geoJsonSection.id = 'GeoJSONURLSection';
-
-    // Font styling controls
-    var fontStyleContainer = document.createElement('div');
-    fontStyleContainer.style.display = 'flex';
-    fontStyleContainer.style.gap = '10px';
-    fontStyleContainer.style.marginBottom = '10px';
-
-    // Font color picker
-    var fontColorContainer = document.createElement('div');
-    fontColorContainer.style.flex = '1';
-    var fontColorLabel = document.createElement('label');
-    fontColorLabel.textContent = 'Label Color:';
-    fontColorLabel.className = 'npw-small-label';
-    var fontColorInput = document.createElement('input');
-    fontColorInput.type = 'color';
-    fontColorInput.id = 'geoJsonFontColor';
-    fontColorInput.value = '#ffffff';
-    fontColorInput.className = 'npw-input';
-    fontColorInput.style.height = '30px';
-    fontColorInput.style.cursor = 'pointer';
-    fontColorContainer.appendChild(fontColorLabel);
-    fontColorContainer.appendChild(fontColorInput);
-
-    // Font size input
-    var fontSizeContainer = document.createElement('div');
-    fontSizeContainer.style.flex = '1';
-    var fontSizeLabel = document.createElement('label');
-    fontSizeLabel.textContent = 'Label Size (px):';
-    fontSizeLabel.className = 'npw-small-label';
-    var fontSizeInput = document.createElement('input');
-    fontSizeInput.type = 'number';
-    fontSizeInput.id = 'geoJsonFontSize';
-    fontSizeInput.value = '13';
-    fontSizeInput.min = '8';
-    fontSizeInput.max = '24';
-    fontSizeInput.className = 'npw-input';
-    fontSizeContainer.appendChild(fontSizeLabel);
-    fontSizeContainer.appendChild(fontSizeInput);
-
-    // The label colour/size are read by the SDK styleContext getters, so changing
-    // them re-renders the already loaded building layers (no reload needed).
-    fontColorInput.addEventListener('input', function () {
-      applyGeoJsonLabelStyle(fontColorInput.value, null);
-    });
-    fontSizeInput.addEventListener('change', function () {
-      applyGeoJsonLabelStyle(null, fontSizeInput.value);
-    });
-
-    fontStyleContainer.appendChild(fontColorContainer);
-    fontStyleContainer.appendChild(fontSizeContainer);
-    geoJsonSection.appendChild(fontStyleContainer);
-
-    // Ward selector
-    var wardLabel = document.createElement('label');
-    wardLabel.textContent = 'Select Ward Number:';
-    wardLabel.className = 'npw-small-label';
-    geoJsonSection.appendChild(wardLabel);
-
-    var wardSelect = document.createElement('select');
-    wardSelect.id = 'geoJsonWardSelect';
-    wardSelect.className = 'npw-select';
-
-    // Add ward options 1-29
-    for (let i = 1; i <= 29; i++) {
-      let option = document.createElement('option');
-      option.value = i;
-      option.textContent = `Ward ${i}`;
-      wardSelect.appendChild(option);
-    }
-    geoJsonSection.appendChild(wardSelect);
-
-    // Load + Clear side by side - WME GeoFile's button-row pattern. A future provider
-    // (Django, ...) only has to append another npwButton() to this row.
-    var geoJsonBtnRow = npwButtonRow(geoJsonSection);
-    npwButton(geoJsonBtnRow, 'Load Buildings', 'Load building data from geonep.com.np', 'primary').addEventListener('click', loadGeoJSONFromURL);
-    npwButton(geoJsonBtnRow, 'Clear Buildings', 'Remove all loaded building layers', 'danger').addEventListener('click', clearLoadedGeoJSON);
-
-    // Status display
-    var geoJsonStatus = document.createElement('div');
-    geoJsonStatus.id = 'geoJsonStatus';
-    geoJsonStatus.className = 'npw-status';
-    geoJsonSection.appendChild(geoJsonStatus);
-
-    // --- GeoJSON Layer Shift Controls ---
-    var geoJsonShiftContainer = document.createElement('div');
-    geoJsonShiftContainer.style.marginTop = '12px';
-    geoJsonShiftContainer.appendChild(npwCreate('div', 'npw-card-title', 'GeoJSON layer shift controls'));
-
-    // Layer selector for shift
-    var geoJsonLayerSelectLabel = document.createElement('label');
-    geoJsonLayerSelectLabel.textContent = 'Select Layer:';
-    geoJsonLayerSelectLabel.className = 'npw-small-label';
-    geoJsonShiftContainer.appendChild(geoJsonLayerSelectLabel);
-
-    var geoJsonLayerSelect = document.createElement('select');
-    geoJsonLayerSelect.id = 'geoJsonLayerSelect';
-    geoJsonLayerSelect.className = 'npw-select';
-    var defaultOption = document.createElement('option');
-    defaultOption.value = '';
-    defaultOption.textContent = '-- Select a loaded layer --';
-    geoJsonLayerSelect.appendChild(defaultOption);
-    geoJsonShiftContainer.appendChild(geoJsonLayerSelect);
-
-    // Shift distance input
-    var geoJsonShiftDistLabel = document.createElement('label');
-    geoJsonShiftDistLabel.textContent = 'Shift Distance (meters):';
-    geoJsonShiftDistLabel.className = 'npw-small-label';
-    geoJsonShiftContainer.appendChild(geoJsonShiftDistLabel);
-
-    var geoJsonShiftDistInput = document.createElement('input');
-    geoJsonShiftDistInput.type = 'number';
-    geoJsonShiftDistInput.id = 'geoJsonShiftDistance';
-    geoJsonShiftDistInput.value = '1'; // default 1 meter shift in direction of arrow clicked
-    geoJsonShiftDistInput.min = '0';
-    geoJsonShiftDistInput.step = '1';
-    geoJsonShiftDistInput.className = 'npw-input';
-    geoJsonShiftContainer.appendChild(geoJsonShiftDistInput);
-
-    // Direction pad for GeoJSON
-    npwBuildShiftPad(
-      geoJsonShiftContainer,
-      function (direction) {
-        shiftGeoJsonLayer(direction);
-      },
-      function () {
-        resetGeoJsonShift();
+    // --- Shared shift pad ---------------------------------------------------
+    // ONE set of buttons drives whichever layer the "Layer tools" dropdown has
+    // selected. Only the dispatch is shared: the WMS engine moves the requested bbox
+    // (content travels the other way) while the GeoJSON engine translates feature
+    // coordinates, and their direction tables are deliberately mirrored. Routing to
+    // the two existing engines keeps both behaviours intact.
+    function shiftSelectedLayer(direction) {
+      var target = selectedShiftTarget();
+      var distInput = document.getElementById('WMSShiftDistance');
+      var dist = distInput ? parseFloat(distInput.value) || 0 : 0;
+      if (!target || !dist) {
+        WazeToastr.Alerts.warning('Selection Required', 'Please select a layer and enter a shift distance.', false, false, 2000);
+        return;
       }
-    );
+      if (target.type === 'geojson') {
+        shiftGeoJsonLayer(direction, target.name, dist);
+      } else {
+        shiftLayer(direction, target.name, dist);
+      }
+    }
 
-    geoJsonSection.appendChild(geoJsonShiftContainer);
+    function resetSelectedLayerShift() {
+      var target = selectedShiftTarget();
+      if (!target) {
+        WazeToastr.Alerts.warning('Selection Required', 'Please select a layer to reset.', false, false, 2000);
+        return;
+      }
+      if (target.type === 'geojson') {
+        resetGeoJsonShift(target.name);
+      } else {
+        resetWMSLayerShift(target.name);
+      }
+    }
+
+    // The opacity slider only works on WMS layers (an SDK feature layer has no
+    // setOpacity), so it follows the selected layer kind instead of doing nothing.
+    function syncOpacityControlToSelection() {
+      var target = selectedShiftTarget();
+      var isWms = !!target && target.type === 'wms';
+      opacityRange.disabled = !isWms;
+      if (!isWms) {
+        opacityLabel.textContent = 'Layer transparency (WMS layers only)';
+        return;
+      }
+      var layer = W.map.getLayers().find(l => l.name === target.name) || null;
+      if (!layer) return;
+      opacityRange.value = layer.opacity * 100;
+      opacityLabel.textContent = 'Layer transparency: ' + opacityRange.value + ' %';
+    }
+
+
+    // --- "Lalitpur HN Address Wards" - viewport auto-loader -------------------
+    // Loads the ticked wards' address points + boundary from geonep.com.np whenever a
+    // ward's bounding box enters the map view, and drops them again once they leave it.
+    var wardCard = npwCard(layersPane, 'Lalitpur HN Address Wards', {
+      collapsible: true,
+      storageKey: 'lalitpur-hn-wards',
+    });
+    wardCard.id = 'LMCWardGroup';
+    var wardBody = wardCard.npwBody;
+
+    wardBody.appendChild(npwCreate('div', 'npw-status', 'Loads the address points and boundary of every ticked ward that is inside the map view. Zoom ' + LMC_MIN_ZOOM + '+ and switch the layer on.'));
+
+    // Master switch for the whole group.
+    var lmcMasterRow = npwCreate('div', 'npw-layer-item');
+    var lmcMasterCheckbox = document.createElement('input');
+    lmcMasterCheckbox.type = 'checkbox';
+    lmcMasterCheckbox.className = 'npw-checkbox';
+    lmcMasterCheckbox.id = 'lmcAutoToggle';
+    lmcMasterCheckbox.checked = lmcAutoEnabled;
+    var lmcMasterLabel = npwCreate('label', 'npw-label', 'Auto-load ticked wards in view');
+    lmcMasterLabel.title = 'Load the address points and boundary of every ticked ward that intersects the current viewport';
+    lmcMasterLabel.addEventListener('click', function () {
+      lmcMasterCheckbox.checked = !lmcMasterCheckbox.checked;
+      lmcMasterCheckbox.dispatchEvent(new Event('change'));
+    });
+    lmcMasterRow.appendChild(lmcMasterCheckbox);
+    lmcMasterRow.appendChild(lmcMasterLabel);
+    wardBody.appendChild(lmcMasterRow);
+
+    // Off-screen cleanup toggle.
+    var lmcRemoveRow = npwCreate('div', 'npw-layer-item');
+    var lmcRemoveCheckbox = document.createElement('input');
+    lmcRemoveCheckbox.type = 'checkbox';
+    lmcRemoveCheckbox.className = 'npw-checkbox';
+    lmcRemoveCheckbox.id = 'lmcAutoRemove';
+    lmcRemoveCheckbox.checked = lmcAutoRemoveEnabled;
+    var lmcRemoveLabel = npwCreate('label', 'npw-label', 'Auto-remove off-screen layers');
+    lmcRemoveLabel.title = 'Remove an auto-loaded ward once it is ' + Math.round(LMC_EVICT_PADDING * 100) + '% of a viewport clear of the edges, after a ' + Math.round(LMC_EVICT_GRACE_MS / 1000) + ' s grace period';
+    lmcRemoveLabel.addEventListener('click', function () {
+      lmcRemoveCheckbox.checked = !lmcRemoveCheckbox.checked;
+      lmcRemoveCheckbox.dispatchEvent(new Event('change'));
+    });
+    lmcRemoveRow.appendChild(lmcRemoveCheckbox);
+    lmcRemoveRow.appendChild(lmcRemoveLabel);
+    wardBody.appendChild(lmcRemoveRow);
+
+    lmcMasterCheckbox.addEventListener('change', function () {
+      setLmcAutoEnabled(lmcMasterCheckbox.checked);
+    });
+    lmcRemoveCheckbox.addEventListener('change', function () {
+      setLmcAutoRemoveEnabled(lmcRemoveCheckbox.checked);
+    });
+
+    // One checkbox per ward, in a compact grid.
+    wardBody.appendChild(npwCreate('span', 'npw-small-label', 'Wards (1-' + LMC_WARD_COUNT + '):'));
+    var lmcWardGrid = npwCreate('div', 'npw-ward-grid');
+    for (var wardNo = 1; wardNo <= LMC_WARD_COUNT; wardNo++) {
+      (function (ward) {
+        var item = npwCreate('label', 'npw-ward-item');
+        item.title = 'Load ward ' + ward + ' when it is in view';
+        var box = document.createElement('input');
+        box.type = 'checkbox';
+        box.className = 'npw-checkbox';
+        box.id = 'lmcWard' + ward;
+        box.checked = !!lmcEnabledWards[ward];
+        box.addEventListener('change', function () {
+          setLmcWardEnabled(ward, box.checked);
+        });
+        item.appendChild(box);
+        item.appendChild(npwCreate('span', 'npw-ward-text', String(ward)));
+        lmcWardGrid.appendChild(item);
+      })(wardNo);
+    }
+    wardBody.appendChild(lmcWardGrid);
+
+    var lmcStatus = npwCreate('div', 'npw-status', lmcAutoEnabled ? 'Waiting for map…' : 'Disabled');
+    lmcStatus.id = 'lmcAutoStatus';
+    wardBody.appendChild(lmcStatus);
+
+    npwButton(wardBody, 'Clear auto-loaded layers', 'Remove every automatically loaded ward layer', 'danger')
+      .addEventListener('click', function () {
+        clearLmcViewportLayers();
+      });
 
     fillWMSLayersSelectList();
+    syncOpacityControlToSelection();
     refreshWmsShiftStatus();
     opacityRange.addEventListener('input', function () {
-      var value = document.getElementById('WMSLayersSelect').value;
-      if (value !== '' && value !== 'undefined') {
-        var layer = W.map.getLayers().find(l => l.name === value) || null;
-        if (!layer) return;
-        layer.setOpacity(opacityRange.value / 100);
-        document.getElementById('WMSOpacityLabel').textContent = 'Layer transparency: ' + document.getElementById('WMSOpacity').value + ' %';
-      }
+      var target = selectedShiftTarget();
+      if (!target || target.type !== 'wms') return;
+      var layer = W.map.getLayers().find(l => l.name === target.name) || null;
+      if (!layer) return;
+      layer.setOpacity(opacityRange.value / 100);
+      opacityLabel.textContent = 'Layer transparency: ' + opacityRange.value + ' %';
     });
     WMSSelect.addEventListener('change', function () {
-      var selectedLayer = W.map.getLayers().filter((layer) => layer.name == WMSSelect.value)[0];
-      if (selectedLayer) {
-        opacityRange.value = selectedLayer.opacity * 100;
-        document.getElementById('WMSOpacityLabel').textContent = 'Layer transparency: ' + document.getElementById('WMSOpacity').value + ' %';
-      }
+      syncOpacityControlToSelection();
       refreshWmsShiftStatus();
     });
     setZOrdering(WMSLayerTogglers);
@@ -2056,6 +3173,7 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
       eventName: 'wme-map-layer-added',
       eventHandler: function () {
         fillWMSLayersSelectList();
+        syncOpacityControlToSelection();
         refreshWmsShiftStatus();
       },
     });
@@ -2063,21 +3181,61 @@ and the WME CSS-variable theming are borrowed from the Croatian WMS layers scrip
       eventName: 'wme-map-layer-removed',
       eventHandler: function () {
         fillWMSLayersSelectList();
+        syncOpacityControlToSelection();
         refreshWmsShiftStatus();
       },
     });
-    wmeSDK.Events.on({ eventName: 'wme-map-layer-added', eventHandler: () => setZOrdering(WMSLayerTogglers) });
-    wmeSDK.Events.on({ eventName: 'wme-map-layer-removed', eventHandler: () => setZOrdering(WMSLayerTogglers) });
-    wmeSDK.Events.on({ eventName: 'wme-map-move-end', eventHandler: () => setZOrdering(WMSLayerTogglers) });
+    wmeSDK.Events.on({ eventName: 'wme-map-layer-added', eventHandler: () => setZOrdering(WMSLayerTogglers)() });
+    wmeSDK.Events.on({ eventName: 'wme-map-layer-removed', eventHandler: () => setZOrdering(WMSLayerTogglers)() });
+    wmeSDK.Events.on({
+      eventName: 'wme-map-move-end',
+      eventHandler: function () {
+        setZOrdering(WMSLayerTogglers)();
+        // Panning/zooming changes which wards are in view for the auto-loader.
+        scheduleLmcViewportUpdate();
+      },
+    });
   }
 
+  // Fill the ONE dropdown the shared shift pad works on: the WMS layers currently on
+  // the map, plus every loaded GeoJSON layer (loaded in the "Layers" tab), grouped.
+  // The option value carries the kind - "wms:<toggler key>" / "geojson:<layer name>" -
+  // which is how the pad knows which of the two shift engines to drive
+  // (see selectedShiftTarget / wmsTogglersOnMap / findWmsLayersForTarget).
   function fillWMSLayersSelectList() {
     const select = document.getElementById('WMSLayersSelect');
+    if (!select) return;
     const value = select.value;
-    let htmlCode = '';
-    W.map.getLayers().filter((layer) => layer.params?.SERVICE === 'WMS').forEach((layer) => (htmlCode += `<option value='${layer.name}'>${layer.name}</option><br>`));
-    select.innerHTML = htmlCode;
-    select.value = value;
+    select.innerHTML = '';
+
+    const wmsGroup = document.createElement('optgroup');
+    wmsGroup.label = 'WMS layers';
+    wmsTogglersOnMap().forEach((entry) => {
+      const option = document.createElement('option');
+      option.value = 'wms:' + entry.key;
+      option.textContent = entry.toggler.layerName;
+      wmsGroup.appendChild(option);
+    });
+    select.appendChild(wmsGroup);
+
+    const geoJsonGroup = document.createElement('optgroup');
+    geoJsonGroup.label = 'GeoJSON layers';
+    loadedGeoJSONLayers.forEach((info) => {
+      const option = document.createElement('option');
+      option.value = 'geojson:' + info.name;
+      option.textContent = info.name;
+      geoJsonGroup.appendChild(option);
+    });
+    select.appendChild(geoJsonGroup);
+
+    // Keep the current selection while that layer still exists; otherwise fall back to
+    // the first entry, because assigning a value that is no longer an option would
+    // leave the dropdown blank.
+    if (value && select.querySelector('option[value="' + value + '"]')) {
+      select.value = value;
+    } else if (select.options.length) {
+      select.selectedIndex = 0;
+    }
   }
 
   /* ------------------------------------------------------------------
@@ -2334,6 +3492,7 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
   var WMS_MASTER_STORAGE_KEY = '_wme_nepali_wms_master';
   var WMS_CATEGORY_OPACITY_STORAGE_KEY = '_wme_nepali_wms_opacity';
   var WMS_COLLAPSED_STORAGE_KEY = '_wme_nepali_wms_collapsed';
+  var WMS_SUBTAB_STORAGE_KEY = '_wme_nepali_wms_subtab';
   var WMS_LAYER_OFFSETS_STORAGE_KEY = '_wme_nepali_wms_layer_offsets';
   var masterLayerToggleOn = true;
 
@@ -2345,6 +3504,16 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
     style.id = 'npw-panel-styles';
     style.textContent = [
       '.npw-panel { box-sizing: border-box; padding: 4px; font-family: inherit; font-size: 11px; line-height: 1.45; color: var(--content_default, #333); }',
+      // Sub-tab bar under the gradient header: a segmented control (Layers / Shifting /
+      // Settings). The active segment is filled, the others just show their label.
+      '.npw-tabs { display: flex; gap: 4px; margin: 0 0 8px; padding: 3px; border: 1px solid var(--hairline, #ddd); border-radius: 8px; background: var(--background_default, #fff); }',
+      // Compound selectors so these rules beat WME's own global button styling.
+      '.npw-tabs > button.npw-tab { flex: 1 1 0; min-width: 0; box-sizing: border-box; padding: 6px 4px; border: none; border-radius: 6px; background: transparent; color: var(--content_p1, #333); font-family: inherit; font-size: 10px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; appearance: none; -webkit-appearance: none; transition: background-color 0.15s, color 0.15s; }',
+      '.npw-tabs > button.npw-tab:hover { background: rgba(127, 127, 127, 0.18); }',
+      '.npw-tabs > button.npw-tab:focus-visible { outline: 2px solid var(--primary, #DC143C); outline-offset: 1px; }',
+      '.npw-tabs > button.npw-tab.npw-tab-active { background: #0066cc; color: #fff; }',
+      '.npw-tabs > button.npw-tab.npw-tab-active:hover { background: #0052a3; }',
+      '.npw-tab-pane[hidden] { display: none; }',
       '.npw-header { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 6px 8px; margin-bottom: 8px; border-radius: 6px; background: linear-gradient(135deg, #DC143C, #7d0b22); color: #fff; }',
       '.npw-header .npw-title { color: #fff; font-size: 12px; font-weight: 700; letter-spacing: 0.3px; text-decoration: none; }',
       '.npw-header .npw-title:hover { text-decoration: underline; }',
@@ -2360,10 +3529,6 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
       '.npw-card.npw-collapsed .npw-card-title { margin-bottom: 0; }',
       '.npw-card-body.npw-collapsed { display: none; }',
       '.npw-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; }',
-      // The checkbox and its label are targeted through the row so these rules outrank
-      // WME's own "input[type=checkbox]" styling (a lone class loses that specificity
-      // fight, which is what pushed the box out of line with the label). The physical
-      // geometry is forced because WME also sets size/margins on native checkboxes.
       '.npw-layer-item { display: flex; align-items: center; gap: 8px; min-height: 18px; margin: 0 0 4px; }',
       '.npw-layer-item:last-child { margin-bottom: 0; }',
       '.npw-layer-item > input.npw-checkbox { display: inline-block; flex: 0 0 auto; box-sizing: border-box; width: 14px !important; height: 14px !important; min-width: 14px; margin: 0 !important; padding: 0 !important; vertical-align: middle; align-self: center; cursor: pointer; accent-color: var(--primary, #DC143C); }',
@@ -2391,6 +3556,26 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
       '.npw-select, .npw-input { box-sizing: border-box; width: 100%; padding: 4px; margin-bottom: 6px; border: 1px solid var(--hairline, #ccc); border-radius: 4px; background: var(--background_default, #fff); color: var(--content_default, #333); font-size: 11px; }',
       '.npw-small-label { display: block; margin-bottom: 3px; font-size: 10px; color: var(--content_p2, #666); }',
       '.npw-status { margin-top: 8px; font-size: 11px; font-style: italic; color: var(--content_p2, #666); }',
+      '.npw-field-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; }',
+      '.npw-field-label { flex: 0 0 auto; min-width: 72px; font-size: 10px; color: var(--content_p2, #666); }',
+      // Compound/native-element selectors + !important: WME's global control styles
+      // outrank a plain class (same gotcha as the layer checkboxes).
+      '.npw-field-row > input.npw-color { flex: 0 0 auto; width: 34px !important; height: 22px !important; padding: 0 2px !important; margin: 0 !important; border: 1px solid var(--hairline, #ccc); border-radius: 4px; background: var(--background_default, #fff); cursor: pointer; }',
+      '.npw-field-row > input.npw-color:disabled { opacity: 0.35; cursor: not-allowed; }',
+      '.npw-field-row > input.npw-number { flex: 0 0 auto; width: 52px !important; padding: 3px 4px !important; margin: 0 !important; border: 1px solid var(--hairline, #ccc); border-radius: 4px; background: var(--background_default, #fff); color: var(--content_default, #333); font-size: 11px; }',
+      '.npw-field-row > input.npw-number:disabled { opacity: 0.35; cursor: not-allowed; }',
+      '.npw-field-row > input.npw-opacity-slider { flex: 1 1 auto; min-width: 0; margin: 0 !important; }',
+      '.npw-field-toggle { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 0 auto; font-size: 10px; color: var(--content_p1, #333); cursor: pointer; user-select: none; white-space: nowrap; }',
+      '.npw-field-toggle > input.npw-checkbox { flex: 0 0 auto; width: 13px !important; height: 13px !important; min-width: 13px; margin: 0 !important; padding: 0 !important; cursor: pointer; accent-color: var(--primary, #DC143C); }',
+      '.npw-radio-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; flex-wrap: wrap; }',
+      '.npw-radio-options { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex: 1 1 auto; }',
+      '.npw-radio-option { display: inline-flex; align-items: center; gap: 4px; margin: 0; font-size: 10px; color: var(--content_p1, #333); cursor: pointer; white-space: nowrap; }',
+      '.npw-radio-option > input[type="radio"] { flex: 0 0 auto; width: 13px !important; height: 13px !important; margin: 0 !important; padding: 0 !important; cursor: pointer; accent-color: var(--primary, #DC143C); }',
+      // Ward grid of the "Lalitpur HN Address Wards" card.
+      '.npw-ward-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px 6px; margin: 4px 0 6px; }',
+      '.npw-ward-item { display: flex; align-items: center; gap: 4px; margin: 0; font-size: 10px; color: var(--content_p1, #333); cursor: pointer; user-select: none; }',
+      '.npw-ward-item > input.npw-checkbox { flex: 0 0 auto; width: 13px !important; height: 13px !important; min-width: 13px; margin: 0 !important; padding: 0 !important; cursor: pointer; accent-color: var(--primary, #DC143C); }',
+      '.npw-ward-text { line-height: 1.3; }',
       '.npw-split { display: flex; gap: 8px; }',
       '.npw-split > div { flex: 1; }',
     ].join('\n');
@@ -2403,6 +3588,77 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
     if (className) el.className = className;
     if (text !== undefined && text !== null) el.textContent = text;
     return el;
+  }
+
+  // Remembered sub-tab (Layers / Shifting / Settings), so reopening WME returns the
+  // user to the tab they were on.
+  function loadSubTab() {
+    try {
+      return localStorage.getItem(WMS_SUBTAB_STORAGE_KEY);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveSubTab(id) {
+    try {
+      localStorage.setItem(WMS_SUBTAB_STORAGE_KEY, id);
+    } catch (e) {
+      // Ignore - a failed preference write must never break the script.
+    }
+  }
+
+  // Sub-tab bar (the segmented control below the panel header). Each entry of `tabs`
+  // is { id, label, title }; a pane per tab is created and returned so the caller can
+  // fill it. Only the pane of the active tab is visible.
+  function npwTabs(host, tabs) {
+    var bar = npwCreate('div', 'npw-tabs');
+    bar.setAttribute('role', 'tablist');
+    var panesHost = npwCreate('div', 'npw-tab-panes');
+    var buttons = {};
+    var panes = {};
+
+    var show = function (id) {
+      if (!panes[id]) return;
+      tabs.forEach(function (tab) {
+        var isActive = tab.id === id;
+        panes[tab.id].hidden = !isActive;
+        buttons[tab.id].classList.toggle('npw-tab-active', isActive);
+        buttons[tab.id].setAttribute('aria-selected', isActive ? 'true' : 'false');
+        buttons[tab.id].tabIndex = isActive ? 0 : -1;
+      });
+      saveSubTab(id);
+    };
+
+    tabs.forEach(function (tab) {
+      var btn = npwCreate('button', 'npw-tab', tab.label);
+      btn.type = 'button';
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-controls', 'npw-tabpane-' + tab.id);
+      if (tab.title) btn.title = tab.title;
+      btn.addEventListener('click', function () {
+        show(tab.id);
+      });
+      bar.appendChild(btn);
+      buttons[tab.id] = btn;
+    });
+
+    tabs.forEach(function (tab) {
+      var pane = npwCreate('div', 'npw-tab-pane');
+      pane.id = 'npw-tabpane-' + tab.id;
+      pane.setAttribute('role', 'tabpanel');
+      pane.hidden = true;
+      panesHost.appendChild(pane);
+      panes[tab.id] = pane;
+    });
+
+    host.appendChild(bar);
+    host.appendChild(panesHost);
+
+    var saved = loadSubTab();
+    show(saved && panes[saved] ? saved : tabs[0].id);
+
+    return { bar: bar, buttons: buttons, panes: panes, show: show };
   }
 
   // Collapsed/expanded state of the panel cards, kept in one localStorage object so a
@@ -2865,195 +4121,6 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
     return OL.Layer.Grid.prototype.getFullRequestString.apply(this, arguments);
   }
 
-  // Function to load GeoJSON from URL
-  function loadGeoJSONFromURL() {
-    const wardNo = document.getElementById('geoJsonWardSelect').value;
-    const fontColor = document.getElementById('geoJsonFontColor').value;
-    const fontSize = document.getElementById('geoJsonFontSize').value;
-    const buildingUrl = `https://geonep.com.np/LMC/ajax/x_building.php?ward_no=${wardNo}`;
-    const boundaryUrl = `https://geonep.com.np/LMC/ajax/x_ward_bnd.php?ward_no=${wardNo}`;
-    const buildingLayerName = `LMC_Ward_${wardNo}_Buildings`;
-    const boundaryLayerName = `LMC_Ward_${wardNo}_Boundary`;
-    
-    // Check if layers already exist
-    if (findGeoJsonLayer(buildingLayerName) || findGeoJsonLayer(boundaryLayerName)) {
-      WazeToastr.Alerts.warning(
-        scriptName,
-        `Ward ${wardNo} layers already loaded`,
-        false,
-        false,
-        3000
-      );
-      return;
-    }
-    
-    updateGeoJsonStatus('Loading buildings and boundary...');
-    console.log(`${scriptName}: Fetching buildings from ${buildingUrl}`);
-    console.log(`${scriptName}: Fetching boundary from ${boundaryUrl}`);
-    
-    // Load buildings first
-    GM_xmlhttpRequest({
-      method: 'GET',
-      url: buildingUrl,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      timeout: 30000,
-      onload: function(response) {
-        if (response.status >= 200 && response.status < 300) {
-          try {
-            const geojsonData = JSON.parse(response.responseText);
-            
-            // Validate GeoJSON structure
-            if (!geojsonData || !geojsonData.type || !geojsonData.features) {
-              throw new Error('Invalid GeoJSON format');
-            }
-            
-            if (geojsonData.features.length === 0) {
-              throw new Error('No features found in GeoJSON');
-            }
-            
-            console.log(`${scriptName}: Loaded ${geojsonData.features.length} building features`);
-            
-            // Create the SDK layer for buildings
-            createGeoJSONLayer(geojsonData, buildingLayerName, wardNo, fontColor, fontSize, 'buildings');
-            
-            // Now load the boundary
-            loadWardBoundary(wardNo, boundaryUrl, boundaryLayerName, geojsonData.features.length);
-            
-          } catch (error) {
-            console.error(`${scriptName}: Error parsing buildings GeoJSON:`, error);
-            updateGeoJsonStatus(`Error: ${error.message}`);
-            WazeToastr.Alerts.error(
-              scriptName,
-              `Failed to parse buildings GeoJSON: ${error.message}`,
-              false,
-              false,
-              5000
-            );
-          }
-        } else {
-          const errorMsg = `HTTP ${response.status}: ${response.statusText}`;
-          console.error(`${scriptName}: ${errorMsg}`);
-          updateGeoJsonStatus(`Error: ${errorMsg}`);
-          WazeToastr.Alerts.error(
-            scriptName,
-            `Failed to load buildings data: ${errorMsg}`,
-            false,
-            false,
-            5000
-          );
-        }
-      },
-      onerror: function(error) {
-        console.error(`${scriptName}: Network error:`, error);
-        updateGeoJsonStatus('Network error occurred');
-        WazeToastr.Alerts.error(
-          scriptName,
-          'Network error: Unable to connect to geonep.com.np',
-          false,
-          false,
-          5000
-        );
-      },
-      ontimeout: function() {
-        console.error(`${scriptName}: Request timeout`);
-        updateGeoJsonStatus('Request timeout');
-        WazeToastr.Alerts.error(
-          scriptName,
-          'Request timeout: Server took too long to respond',
-          false,
-          false,
-          5000
-        );
-      }
-    });
-  }
-
-  // Function to load ward boundary
-  function loadWardBoundary(wardNo, boundaryUrl, boundaryLayerName, buildingCount) {
-    GM_xmlhttpRequest({
-      method: 'GET',
-      url: boundaryUrl,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      timeout: 30000,
-      onload: function(response) {
-        if (response.status >= 200 && response.status < 300) {
-          try {
-            const boundaryData = JSON.parse(response.responseText);
-            
-            // Validate GeoJSON structure
-            if (!boundaryData || !boundaryData.type || !boundaryData.features) {
-              throw new Error('Invalid boundary GeoJSON format');
-            }
-            
-            console.log(`${scriptName}: Loaded ${boundaryData.features.length} boundary features`);
-            
-            // Create the SDK layer for the boundary
-            createGeoJSONLayer(boundaryData, boundaryLayerName, wardNo, null, null, 'boundary');
-            
-            updateGeoJsonStatus(`Loaded ${buildingCount} buildings and boundary for Ward ${wardNo}`);
-            WazeToastr.Alerts.success(
-              scriptName,
-              `Successfully loaded ${buildingCount} buildings and boundary for Ward ${wardNo}`,
-              false,
-              false,
-              3000
-            );
-            
-          } catch (error) {
-            console.error(`${scriptName}: Error parsing boundary GeoJSON:`, error);
-            updateGeoJsonStatus(`Loaded buildings but boundary failed: ${error.message}`);
-            WazeToastr.Alerts.warning(
-              scriptName,
-              `Loaded buildings but boundary failed: ${error.message}`,
-              false,
-              false,
-              5000
-            );
-          }
-        } else {
-          const errorMsg = `HTTP ${response.status}: ${response.statusText}`;
-          console.error(`${scriptName}: Boundary ${errorMsg}`);
-          updateGeoJsonStatus(`Loaded buildings but boundary failed`);
-          WazeToastr.Alerts.warning(
-            scriptName,
-            `Loaded buildings but boundary failed: ${errorMsg}`,
-            false,
-            false,
-            5000
-          );
-        }
-      },
-      onerror: function(error) {
-        console.error(`${scriptName}: Boundary network error:`, error);
-        updateGeoJsonStatus('Buildings loaded, boundary network error');
-        WazeToastr.Alerts.warning(
-          scriptName,
-          'Buildings loaded, but boundary failed to load',
-          false,
-          false,
-          5000
-        );
-      },
-      ontimeout: function() {
-        console.error(`${scriptName}: Boundary request timeout`);
-        updateGeoJsonStatus('Buildings loaded, boundary timeout');
-        WazeToastr.Alerts.warning(
-          scriptName,
-          'Buildings loaded, but boundary request timeout',
-          false,
-          false,
-          5000
-        );
-      }
-    });
-  }
-
   // Helper function to remove Z coordinates from GeoJSON
   function removeZCoordinates(coords) {
     if (!coords) return coords;
@@ -3068,28 +4135,21 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
     return coords.map(removeZCoordinates);
   }
 
-  // Function to create a GeoJSON SDK feature layer
-  function createGeoJSONLayer(geojsonData, layerName, wardNo, fontColor, fontSize, layerType) {
+  // Function to create a feature-layer SDK layer. Today this is the LMC ward address
+  // points and boundary; any future importer (KML, GPX, ...) that produces GeoJSON
+  // features can call it with its own layer name and type.
+  function createGeoJSONLayer(geojsonData, layerName, wardNo, layerType) {
     try {
-      // Default values for building layers
-      fontColor = fontColor || '#ffffff';
-      fontSize = fontSize || '13';
       layerType = layerType || 'buildings';
 
-      // Seed the mutable label style so a newly loaded layer matches the inputs
-      if (layerType === 'buildings') {
-        geoJsonLabelStyle.fontColor = fontColor;
-        geoJsonLabelStyle.fontSize = String(fontSize);
-      }
+      // Register this layer's mutable style state before the SDK builds the style
+      // context: the getters close over it, so the Style Settings card can restyle the
+      // layer later with redrawLayer() alone.
+      writeLayerStyleState(layerName, resolveStyleValues(rawStyleValues(layerName)));
 
       console.log(`${scriptName}: Creating ${layerType} SDK layer for Ward ${wardNo}`);
-
-      if (layerType === 'buildings') {
-        console.log(`${scriptName}: Label settings - Color: ${geoJsonLabelStyle.fontColor}, Size: ${geoJsonLabelStyle.fontSize}px`);
-      }
-      
       console.log(`${scriptName}: GeoJSON data:`, geojsonData);
-      
+
       // Ensure we have valid GeoJSON
       if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) {
         throw new Error('No features in GeoJSON data');
@@ -3151,20 +4211,15 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
         throw new Error('No valid features could be parsed from GeoJSON');
       }
       
-      // Declarative SDK styling (see GEOJSON_LAYER_STYLES). The label values reference
-      // the styleContext getters, so colour/size can change without reloading.
+      // Declarative SDK styling. The structure comes from the layer type and every
+      // value from the layer's style state (see buildLayerStyleRules /
+      // buildLayerStyleContext), which is what the Style Settings card drives.
       const layerConfig = {
         layerName: layerName,
         zIndexing: true,
-        styleRules: [{ style: GEOJSON_LAYER_STYLES[layerType] || GEOJSON_LAYER_STYLES.buildings }],
+        styleRules: buildLayerStyleRules(layerType),
+        styleContext: buildLayerStyleContext(layerName, layerType),
       };
-      if (layerType === 'buildings') {
-        layerConfig.styleContext = {
-          getLabel: (ctx) => (ctx && ctx.feature && ctx.feature.properties && ctx.feature.properties.custom_label) || '',
-          getFontSize: () => geoJsonLabelStyle.fontSize + 'px',
-          getFontColor: () => geoJsonLabelStyle.fontColor,
-        };
-      }
 
       wmeSDK.Map.addLayer(layerConfig);
       // Bulk load - the GeoJSON was already parsed, so validation is skipped on purpose
@@ -3202,58 +4257,8 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
     }
   }
 
-  // Function to clear all loaded GeoJSON layers
-  function clearLoadedGeoJSON() {
-    if (loadedGeoJSONLayers.length === 0) {
-      WazeToastr.Alerts.info(
-        scriptName,
-        'No building layers to clear',
-        false,
-        false,
-        2000
-      );
-      return;
-    }
-    
-    let removedCount = 0;
-    loadedGeoJSONLayers.forEach(item => {
-      try {
-        wmeSDK.Map.removeAllFeaturesFromLayer({ layerName: item.name });
-      } catch (e) {
-        // Layer may already be gone - removing it below is enough.
-      }
-      try {
-        wmeSDK.Map.removeLayer({ layerName: item.name });
-        removedCount++;
-      } catch (e) {
-        if (!(wmeSDK.Errors && e instanceof wmeSDK.Errors.InvalidStateError)) {
-          console.warn(`${scriptName}: could not remove layer ${item.name}`, e);
-        }
-      }
-      delete geoJsonLayerOffsets[item.name];
-    });
-
-    loadedGeoJSONLayers = [];
-    updateGeoJsonLayerSelector();
-    updateGeoJsonStatus('All building layers cleared');
-    
-    WazeToastr.Alerts.success(
-      scriptName,
-      `Removed ${removedCount} building layer(s)`,
-      false,
-      false,
-      2000
-    );
-  }
-
-  // Helper function to update status display
-  function updateGeoJsonStatus(message) {
-    const statusDiv = document.getElementById('geoJsonStatus');
-    if (statusDiv) {
-      statusDiv.textContent = message;
-      statusDiv.style.color = message.includes('Error') ? '#f44336' : '#4CAF50';
-    }
-  }
+  // "Clear auto-loaded layers" lives on the ward group card (clearLmcViewportLayers),
+  // which removes every loaded feature layer through removeLmcLayer().
 
     function scriptupdatemonitor() {
   if (WazeToastr?.Ready) {
@@ -3281,6 +4286,58 @@ For GIS tools or legacy clients, use WMS 1.1.1 + EPSG:4326.*/
   unsafeWindow.SDK_INITIALIZED.then(bootstrap);
   /*
 changeLog
+2026.09.14.004
+<strong>Changed - Style Settings defaults:</strong><br>
+- The default feature-layer style now reproduces the previous LMC ward GeoJSON look instead of the neutral WME GeoFile blue: stroke <code>#FF5722</code> (orange), line width 2 px at 80% opacity, label size 13 px with white text and a black outline, centred on the feature (OL2 <code>labelAlign: cm</code>).<br>
+- <strong>Fill Opacity now defaults to 0</strong>, so ward polygons render as outlines only (the previous building fill was 0.01 and the boundary fill 0.05). Raise it with the <em>Fill Opacity</em> slider when a filled area is wanted.<br>
+- These are the fallback values, used when neither the global style nor a layer override has been touched. A previously saved global style or per-layer override still wins - press <em>Reset to defaults</em> (global) or <em>Reset this layer</em> to pick up the new values.<br>
+- Ward addresses and ward boundaries now share these defaults; give one of them an override in the <em>Apply to</em> dropdown to keep their colours apart again.<br><br>
+2026.09.14.003
+<strong>Added - Style Settings (Settings tab):</strong><br>
+- Ported the "Style Settings" card from WME GeoFile (WME-NP-GIS-Layers). It styles every non-WMS/XYZ layer - the LMC ward address/boundary layers today, and any KML, KMZ, GML, GPX, WKT or ZIP(SHP) importer added later. WMS and XYZ layers keep their own opacity control and are deliberately untouched.<br>
+- Controls: Stroke Color, Font Size, Label Color and Outline Color (each with a <em>Match stroke</em> switch), Outline Width (optionally <em>Relative to font size</em>, i.e. fontSize / 4), Fill Opacity, Line Size, Line Style (Solid / Dash / Dot), Line Opacity and Label Position (horizontal Left/Center/Right + vertical Top/Middle/Bottom, which becomes the OL2 <code>labelAlign</code>).<br>
+- One <em>global</em> style plus an optional <em>per-layer override</em>: the <em>Apply to</em> dropdown switches between <em>All layers (global)</em> and a single loaded layer. <em>Reset to defaults</em> clears the global style, <em>Reset this layer</em> drops that layer's override so it follows the global style again.<br>
+- Changes restyle already loaded layers with <code>Map.redrawLayer()</code> - no feature is removed or re-added - and are debounced (200 ms), so dragging a slider redraws once. Styles and overrides persist in IndexedDB (<code>NepaliWMSFeatureStyles</code> &gt; <code>styles</code>).<br>
+- The hard-coded per-type styles (<code>GEOJSON_LAYER_STYLES</code>) and the two label inputs in the old GeoJSON card are gone; the style engine is the single source of truth. Note that buildings and boundaries now share the global style by default (boundaries stay unlabelled) - give one of them an override to keep their colours apart.<br><br>
+<strong>Added - "Lalitpur HN Address Wards" (Layers tab):</strong><br>
+- The manual <em>Load GeoJSON from URL</em> card (ward dropdown, label colour/size inputs, <em>Load Buildings</em> button) is retired. In its place is a collapsible group card with a master switch, an <em>Auto-remove off-screen layers</em> switch, one checkbox per ward (1-29, all off by default) and a single <em>Clear auto-loaded layers</em> button.<br>
+- A ticked ward is loaded automatically as soon as its bounding box intersects the map view: its address points (<code>x_building.php?ward_no=N</code>) and its ward boundary (<code>x_ward_bnd.php?ward_no=N</code>), including the house-number / road-name labels the ward addresses carry.<br>
+- The loader follows the WME GeoFile KML loader: a debounced <code>wme-map-move-end</code> pass, a zoom gate (11+), batches of 4 downloads, a padded-viewport eviction test with an 8 s grace period, and a 60-layer hard cap. <em>Auto-remove</em> can be switched off to keep loaded wards on the map.<br>
+- The LMC endpoints are per-ward and carry no bbox, so each ward's bbox is derived once from its boundary file and cached in IndexedDB (<code>lmc-ward-bboxes</code>) - afterwards a reload needs no boundary request at all. The master switch, the ticked wards and the auto-remove flag live in <code>localStorage._wme_nepali_wms_lmc_auto</code>.<br>
+- Loaded ward layers are ordinary feature layers: they appear in the Shifting dropdown, can be shifted/reset and are restyled by the Style Settings card.<br><br>
+2026.09.14.002
+<strong>Fixed - GeoJSON shift directions (again):</strong><br>
+- The GeoJSON pad moved the loaded layer <em>opposite</em> to the arrow for left/right and all four diagonals (up/down were unaffected). <code>2026.09.13.021</code> wrongly claimed the GeoJSON table had to be the horizontal <em>mirror</em> of the WMS table and restored that mirror; the mirror is what caused the original bug.<br>
+- The GeoJSON coordinates are WGS84 degrees, so <code>+dLon</code> is east and <code>+dLat</code> is north and the translated content moves the same way, which means <code>left</code> has to <em>decrease</em> the longitude. The table is now the full negation of the WMS <code>shiftLayer()</code> table (both axes) - WMS moves the requested bbox, so its content travels the other way.<br>
+- Restored <code>left: dx = -dist</code>, <code>right: dx = +dist</code>, <code>upleft: dx = -diag</code>, <code>upright: dx = +diag</code>, <code>downleft: dx = -diag</code>, <code>downright: dx = +diag</code> (the <code>dy</code> values are unchanged). Every arrow now moves the GeoJSON layer the way it points, matching the WMS arrows.<br><br>
+2026.09.13.021
+<strong>Fixed - GeoJSON shift directions:</strong><br>
+- The GeoJSON pad moved the loaded layer <em>opposite</em> to the arrow for left/right and all four diagonals (up/down were unaffected). <code>.020</code> had "corrected" the GeoJSON direction table to match the WMS table, negating <code>dx</code>; that is wrong. The GeoJSON table is, by field-verified design, the horizontal <em>mirror</em> of the WMS table - WMS shifts the request bbox (content travels the opposite way) while GeoJSON translates feature coordinates directly, so the two must differ.<br>
+- Restored <code>left: dx = +dist</code>, <code>right: dx = -dist</code>, <code>upleft: dx = +diag</code>, <code>upright: dx = -diag</code>, <code>downleft: dx = +diag</code>, <code>downright: dx = -diag</code> (the <code>dy</code> values are unchanged). Every arrow now moves the GeoJSON layer the way it points, while the WMS arrows keep behaving as before.<br><br>
+2026.09.13.020
+<strong>Fixed - shift pad:</strong><br>
+- GeoJSON shift directions were mirrored horizontally: <em>left/right and all four diagonals moved the layer the wrong way</em> while up/down were correct. In WGS84 <code>+x</code> is east and <code>+y</code> is north and <code>dLon</code> is derived from <code>dx</code>, so the horizontal component is no longer negated. Every arrow now moves the loaded layer in the direction it points.<br>
+- The WMS arrows did nothing at all. The pad resolved the layer with <code>W.map.getLayers().find(l =&gt; l.name === &lt;name from the dropdown&gt;)</code>, but <code>addLayerToggler()</code> renames a toggler's layers to "&lt;display name&gt; 0", "&lt;display name&gt; 1" when it owns several, and the listing also depended on <code>layer.params.SERVICE</code> being upper-cased. The dropdown is now keyed by the <em>toggler</em> (<code>wms:&lt;toggler key&gt;</code>) and the layers are resolved by object identity (<code>wmsTogglersOnMap()</code> / <code>findWmsLayersForTarget()</code>), so no name matching is involved.<br>
+- A toggler's on-map layers are all shifted and reset together - the same set its checkbox controls - instead of only the one whose name happened to match.<br>
+- The pad no longer fails silently: if the selected layer is not on the map it now says so ("Layer Not On Map - switch the layer on first"), which is what made the WMS case look dead. The dropdown hint now mentions that only switched-on layers are listed.<br><br>
+2026.09.13.019
+<strong>UI - shared shift pad:</strong><br>
+- The WMS layers and the loaded GeoJSON layers now use <em>one</em> set of shift buttons. The "Layer tools" card in the <em>Shifting</em> tab has a single dropdown listing both kinds, grouped (<em>WMS layers</em> / <em>GeoJSON layers</em>), one distance field, one 3x3 pad and one <em>Reset Shift</em>.<br>
+- The option value carries the layer kind (<code>wms:&lt;name&gt;</code> / <code>geojson:&lt;name&gt;</code>) and the pad dispatches to the right engine through the new <code>shiftSelectedLayer()</code> / <code>resetSelectedLayerShift()</code>. The two engines are deliberately NOT merged: the WMS pad moves the requested bbox (content travels the opposite way) while the GeoJSON pad translates feature coordinates, and their direction tables are mirrored by design.<br>
+- The duplicate GeoJSON shift block (its own dropdown, distance input and pad in the GeoJSON card) has been removed. <code>shiftGeoJsonLayer()</code> and <code>resetGeoJsonShift()</code> now take the layer name and distance as arguments instead of reading their own dropdown.<br>
+- The applied-shift line reports both kinds in metres: GeoJSON offsets are stored in degrees and are converted back for display (<code>describeGeoJsonOffset()</code>).<br>
+- The transparency slider is WMS-only, so it now disables itself when a GeoJSON layer is selected instead of silently doing nothing.<br>
+- The GeoJSON card keeps the ward picker, label colour/size and Load/Clear, plus a hint that loaded layers are shifted from the Shifting tab.<br><br>
+2026.09.13.018
+<strong>Fixed:</strong><br>
+- The info-popup title bar (the green <code>tr.alert-success</code> heading) was unreadable: the background was a translucent green (<code>rgba(40, 167, 69, 0.25)</code>) while the text inherited the theme colour, so it rendered green on green. It is now a solid <code>#8BC34A</code> bar with dark (<code>#1b1b1b</code>) bold text, which keeps a readable contrast in both the light and the dark editor theme. Applied to both popup builders (<code>showWMSPopupAtPixel</code> and <code>showWMSPopupAtPixelForLayer</code>).<br><br>
+2026.09.13.017
+<strong>UI:</strong><br>
+- The sidebar panel is now split into sub-tabs below the gradient header: <em>Layers</em>, <em>Shifting</em> and <em>Settings</em>, built with the new shared <code>npwTabs()</code> helper (segmented control, ARIA <code>tablist</code>/<code>tab</code>/<code>tabpanel</code> roles).<br>
+- <em>Layers</em> holds everything it showed before: the collapsible layer-group cards (opacity slider + checkbox per layer) and the GeoJSON loader card. <em>Shifting</em> holds the Layer tools card (layer select, transparency, shift distance, 3x3 pad, reset, applied-shift status). <em>Settings</em> is a placeholder for options added later.<br>
+- The selected sub-tab is remembered in <code>localStorage</code> (<code>_wme_nepali_wms_subtab</code>), so a reload returns to the tab that was last open.<br>
+<strong>Fixed:</strong><br>
+- Layer-row checkboxes sat out of line with their labels: WME's global <code>input[type=checkbox]</code> rule outranks a plain class, so its size/margins won. The checkbox and label are now targeted as <code>.npw-layer-item &gt; input.npw-checkbox</code> / <code>&gt; label.npw-label</code> with a pinned 14x14 box and a centred label.<br><br>
 2026.09.13.016
 <strong>Added:</strong><br>
 - WMS layers can now start from a corrected position: <code>WMS_LAYER_SHIFT_PRESETS</code> holds a built-in default shift per layer, applied <em>before the first tile is drawn</em>, so e.g. the inaccurate DMG municipality border no longer has to be nudged into place by hand (no 260 clicks after every reload). Values are written the way they are measured on the map: <code>{ west: 260, north: 20 }</code> = pull the layer 260 m west and 20 m north. Currently set for the DMG municipality border.<br>
